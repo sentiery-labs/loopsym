@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@v4      # 파이썬↔JS 엔진 동기화 테스트용
+        with:
+          node-version: "20"
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest tests/ -q
+      - name: examples smoke test
+        run: |
+          python examples/ex1_pi_closed_loop.py
+          python examples/ex2_pendulum_pyfunction.py
+          python examples/ex3_subsystem.py

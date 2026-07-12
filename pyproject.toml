@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# ※제품명 미확정 (WORKPLAN §7-2) — PyPI 공개 전 이름 결정 필요. 임시 이름.
+name = "blocksim-edu"
+version = "0.1.0"
+description = "Simulink 원리를 배우는 교육용 파이썬 블록 다이어그램 시뮬레이터 (인터랙티브 뷰어 포함)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "chungh6577" }]
+keywords = ["simulation", "block-diagram", "control", "education", "simulink"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Education",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = []            # 코어는 순수 파이썬 — 의존성 0 (교육용 설계 원칙)
+
+[project.optional-dependencies]
+examples = ["matplotlib"]
+dev = ["pytest", "matplotlib"]
+
+[tool.setuptools]
+packages = ["blocksim"]
+
+[tool.setuptools.package-data]
+blocksim = ["viewer.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
