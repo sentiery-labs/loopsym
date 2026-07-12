@@ -23,21 +23,23 @@ from blocksim import (
 )
 
 # --- PI 제어기 내부 다이어그램 ---
+# 게인을 "$Kp"/"$Ki" 로 두면 마스크 파라미터가 된다 (Simulink mask 대응).
+# 같은 서브시스템을 params 만 바꿔 여러 개 재사용할 수 있다.
 pi_d = Diagram()
 e   = pi_d.add(Inport(0, name="e"))
-kp  = pi_d.add(Gain(k=3.0, name="Kp"))
+kp  = pi_d.add(Gain(k="$Kp", name="Kp"))
 it  = pi_d.add(Integrator(name="err_int"))
-ki  = pi_d.add(Gain(k=2.0, name="Ki"))
+ki  = pi_d.add(Gain(k="$Ki", name="Ki"))
 add = pi_d.add(Sum("++", name="add"))
 u   = pi_d.add(Outport(0, name="u"))
 pi_d.connect(e, kp); pi_d.connect(e, it); pi_d.connect(it, ki)
 pi_d.connect(kp, add[0]); pi_d.connect(ki, add[1]); pi_d.connect(add, u)
 
-# --- 최상위: ref -> err -> [PI_ctrl] -> plant -> scope ---
+# --- 최상위: ref -> err -> [PI_ctrl(Kp=3, Ki=2)] -> plant -> scope ---
 bd = Diagram()
 ref   = bd.add(Step(t_on=1.0, name="ref"))
 err   = bd.add(Sum("+-", name="err"))
-ctrl  = bd.add(Subsystem(pi_d, name="PI_ctrl"))
+ctrl  = bd.add(Subsystem(pi_d, params={"Kp": 3.0, "Ki": 2.0}, name="PI_ctrl"))
 plant = bd.add(TransferFunction([1], [1, 2, 1], name="plant"))
 scope = bd.add(Scope(n_in=2, labels=["ref", "y"], name="scope"))
 bd.connect(ref, err[0]); bd.connect(plant, err[1])

@@ -9,12 +9,18 @@ Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬
 | 파일 | 내용 | 수업 주제 |
 |------|------|-----------|
 | `blocksim/core.py` | `Block` 베이스 클래스, `Diagram`, 위상 정렬 + 대수 루프 검출 | 클래스/상속, 그래프 알고리즘 |
-| `blocksim/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport) | 상태공간, feedthrough 개념 |
-| `blocksim/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 (Simulink ode4 대응) | 수치적분, 안정성, 계층 구조 |
-| `blocksim/viz.py` + `viewer.html` | 인터랙티브 다이어그램 뷰어 생성 | — |
+| `blocksim/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
+| `blocksim/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 + 이산 상태 실행 | 수치적분, 안정성, 계층 구조 |
+| `blocksim/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
 | `examples/ex1_pi_closed_loop.py` | PI 제어 폐루프 (2차 플랜트) | 폐루프, 정상상태 오차 0 |
 | `examples/ex2_pendulum_pyfunction.py` | 비선형 진자 + PD (PyFunction) | 왜 적분항이 필요한가 |
-| `examples/ex3_subsystem.py` | PI 제어기를 Subsystem 으로 묶기 | 계층화, flatten, feedthrough 분석 |
+| `examples/ex3_subsystem.py` | 마스크 PI 서브시스템 (`Gain(k="$Kp")`) | 계층화, flatten, 마스크 |
+| `examples/ex4_discrete_pi.py` | 연속 PI vs 이산 PI (Ts 영향) | 샘플링, PX4 로 가는 다리 |
+| `tests/` | pytest 회귀 + **파이썬↔JS 엔진 동기화** 테스트 | — |
+| `docs/` | 15주 커리큘럼 설계, P14/P40 스파이크 결과 | — |
+| `spikes/`, `hardware/` | 실시간 루프 지터 측정, Bebop 2 스파이크(+안전 체크리스트) | — |
+
+개발: `pip install -e ".[dev]"` 후 `python -m pytest tests/ -q` (node 있으면 JS 동기화 테스트 포함)
 
 ## 빠른 시작
 

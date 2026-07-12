@@ -26,3 +26,4 @@ jobs:
           python examples/ex1_pi_closed_loop.py
           python examples/ex2_pendulum_pyfunction.py
           python examples/ex3_subsystem.py
+          python examples/ex4_discrete_pi.py
