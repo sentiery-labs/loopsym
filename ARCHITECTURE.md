@@ -75,19 +75,21 @@ Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
 
 ## 3. 15주 커리큘럼 대응 (P21과 정합)
 
-주차 진행 = 팔레트를 하나씩 여는 것.
+> 2026-07-14 개정: 충박사 결정 ③ **하이브리드** — 전반은 엔진 제작(파이썬 수업),
+> 후반이 이 문서의 팔레트 개방 트랙. 주차 상세 정본 = `docs/curriculum_15weeks.md`.
 
-| 주차 | 여는 팔레트 | 학생 경험 |
-|---|---|---|
-| 1~3 | Math, Sources | 블록/솔버 개념, 1차 시스템 응답 |
-| 4~5 | Plant | 6-DoF 이해, 개루프 불안정 체험 |
-| 6~8 | Control, Allocation | PID→rate→attitude→position 폐루프 완성 |
-| 9~10 | Sensors, Estimation | **ideal→noisy 전환으로 기체가 흔들리는 것을 목격 → 필터로 복구.** 상태추정의 존재 이유를 체험 |
-| 11~12 | Navigation | waypoint 미션, 유도 법칙 |
-| 13~14 | Interfaces | plant를 Gazebo로 교체, ROS2 노드 데모 |
-| 15 | — | HILS 시연 |
+| 주차 | 트랙 | 여는 팔레트 | 학생 경험 |
+|---|---|---|---|
+| 1~6 | 엔진 제작 | (자기 엔진) | 블록/그래프/위상정렬/대수루프/RK4 를 바닥부터 |
+| 7 | ★브리지 | Math, Sources | 내 엔진 ↔ 정식 blocksim 교차 검증 (6자리 일치) |
+| 8 | 팔레트 개방 | Plant | 6-DoF 이해, 개루프 불안정 체험 |
+| 9~10 | 팔레트 개방 | Control, Allocation | 샘플링/이산 + PID→rate→attitude→position 폐루프 |
+| 11~12 | 팔레트 개방 | Sensors, Estimation | **ideal→noisy 전환으로 기체가 흔들리는 것을 목격 → 필터로 복구.** 상태추정의 존재 이유를 체험 |
+| 13 | 팔레트 개방 | Navigation | waypoint 미션 + 실시간 모드/ROS2 turtlesim |
+| 14 | 팔레트 개방 | Interfaces | plant를 Gazebo로 교체 (P44b; 대체안 ROS2 실기체 데모) |
+| 15 | — | — | HILS 시연 + 프로젝트 발표 |
 
-9주차의 "ideal→noisy 전환 순간"이 교육적 하이라이트다.
+11주차의 "ideal→noisy 전환 순간"이 교육적 하이라이트다.
 이 데모가 성립하도록 센서 규약(§2)이 설계되었다.
 
 ---
@@ -145,4 +147,4 @@ Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
 | §4 T6 Gazebo fidelity | P44b 와 통합 | ⬜ 보류 (사용자 지시 7/14: P44b 착수 금지) |
 | §4 T7 Hardware fidelity | P41/P43 과 통합 | 🟡 P41 스파이크 준비완료 (실기체 대기) |
 | §5 P40/P42/P44a | — | ✅ 완료 (P40 재검증 PASS, 실시간 러너, ROS2 블록+turtlesim) |
-| §3 커리큘럼 대응 | [OPS-P21] 리뷰 안건 | ⚠ **docs/curriculum_15weeks.md 와 구성 충돌 — 리뷰 시 결정 필요** (WORKPLAN §7 참조) |
+| §3 커리큘럼 대응 | [OPS-P21] | ✅ 해소(7/14) — **하이브리드 확정**, curriculum_15weeks.md 개정 완료. P22 착수 가능 |
