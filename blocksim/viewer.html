@@ -808,6 +808,15 @@ const nOutOf = b => LIB[b.type].nOut(b);
 
 /* ---------------- 포인터 인터랙션 ---------------- */
 let drag = null;
+// 더블클릭을 pointerdown 에서 직접 판정 — 클릭 때마다 render() 가 SVG 를
+// 재생성하므로 네이티브 dblclick 은 대상 요소가 바뀌어 잡히지 않는다.
+let lastTap = { key: null, t: 0 };
+function isDoubleTap(key) {
+  const now = performance.now();
+  const dbl = lastTap.key === key && now - lastTap.t < 400;
+  lastTap = { key: dbl ? null : key, t: now };
+  return dbl;
+}
 function svgXY(ev) {
   const pt = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(svg.getScreenCTM().inverse());
   return [pt.x, pt.y];
@@ -839,15 +848,24 @@ svg.addEventListener("pointerdown", ev => {
         select(ids.length ? { kind: "blocks", ids } : null);
         return;
       }
+      if (isDoubleTap("b" + id)) {              // 더블클릭: 서브시스템 열기 / ƒ 편집기
+        const b = blk(id);
+        if (b?.type === "Subsystem") { path.push(b.id); select(null); return; }
+        if (b?.type === "PyFunction") { openFnEditor(b); return; }
+      }
       if (!ids.includes(id)) { ids = [id]; select({ kind: "blocks", ids }); }
       drag = { kind: "move", ids, offs: new Map(ids.map(i => {
         const b = blk(i); return [i, [mx - b.x, my - b.y]];
       })) };
       svg.setPointerCapture(ev.pointerId);
     } else if (t.dataset.wire !== undefined) {
-      // 클릭 = 선택, 가운데 세그먼트 드래그 = 배선 조정 (4px 이동 후 판정)
+      // 클릭 = 선택, 가운데 세그먼트 드래그 = 배선 조정, 더블클릭 = 자동 배선 리셋
       const wi = +t.dataset.wire;
       const w = cm.wires[wi];
+      if (isDoubleTap("w" + wi)) {
+        if (w?.pts) { delete w.pts; render(); status("자동 배선으로 리셋했습니다.", ""); }
+        return;
+      }
       const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
       const poly = wirePoly(cm, w, sb, db);
       const seg = +(t.dataset.seg ?? -1);
@@ -863,6 +881,7 @@ svg.addEventListener("pointermove", ev => {
   if (!drag) return;
   const [mx, my] = svgXY(ev);
   if (drag.kind === "move") {
+    lastTap.key = null;             // 드래그면 더블클릭 판정 취소
     for (const [id, [ox, oy]] of drag.offs) {
       const b = blk(id); if (!b) continue;
       b.x = Math.round((mx - ox) / 10) * 10;
@@ -881,6 +900,7 @@ svg.addEventListener("pointermove", ev => {
       if (!w.pts || !w.pts.length)                       // 첫 드래그: 자동 배선을 실체화
         w.pts = drag.poly.slice(1, -1).map(p => p.slice());
       drag.moved = true;
+      lastTap.key = null;           // 드래그면 더블클릭 판정 취소
     }
     const w = cur().wires[drag.wi];
     const a = w.pts[drag.seg - 1], b = w.pts[drag.seg];
@@ -920,18 +940,8 @@ svg.addEventListener("pointerup", ev => {
   drag = null;
   render();
 });
-svg.addEventListener("dblclick", ev => {
-  if (ev.target.dataset?.wire !== undefined) {           // 와이어 더블클릭 = 자동 배선 리셋
-    const w = cur().wires[+ev.target.dataset.wire];
-    if (w?.pts) { delete w.pts; render(); status("자동 배선으로 리셋했습니다.", ""); }
-    return;
-  }
-  const g = ev.target.closest("[data-blk]");
-  if (!g) return;
-  const b = blk(+g.dataset.blk);
-  if (b?.type === "Subsystem") { path.push(b.id); select(null); }
-  else if (b?.type === "PyFunction") openFnEditor(b);    // ƒ 코드 편집기
-});
+// (네이티브 dblclick 은 쓰지 않는다 — pointerdown 의 isDoubleTap 이 담당.
+//  클릭마다 render() 가 요소를 재생성해 네이티브 dblclick 이 유실되기 때문.)
 
 /* ---------------- PyFunction 코드 편집기 (더블클릭) ---------------- */
 const dlgFn = document.getElementById("dlgFn");
