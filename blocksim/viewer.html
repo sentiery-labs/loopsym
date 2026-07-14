@@ -254,6 +254,8 @@
     <span id="bsStatus"></span>
     <label>t_end <input type="text" id="inTend" value="10"></label>
     <label>dt <input type="text" id="inDt" value="0.01"></label>
+    <label id="rtWrap" hidden title="벽시계 1:1 페이싱 — Scope 가 라이브로 흐른다 (서버 모드 전용)">
+      <input type="checkbox" id="inRT"> 실시간</label>
     <button class="primary" id="btnRun">▶ 실행</button>
     <button id="btnCode">Python 코드</button>
     <button id="btnSave">저장</button>
@@ -1009,7 +1011,7 @@ const PYODIDE_URLS = [
   "../blocksim/pyodide/pyodide.js",
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.js`,
 ];
-const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py"];
+const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py"];
 let enginePromise = null;   // Promise<run_simulation> — 최초 1회만 로드하고 재사용
 
 function loadScriptTag(src) {
@@ -1072,6 +1074,7 @@ function setMode() {
   const el = document.getElementById("bsMode");
   el.textContent = serverWs ? "Local Server" : "Browser (Pyodide)";
   el.classList.toggle("srv", !!serverWs);
+  document.getElementById("rtWrap").hidden = !serverWs;   // 실시간은 서버 모드 전용
 }
 function tryServer() {
   let ws;
@@ -1111,7 +1114,8 @@ function handleServerMsg(m) {
 function runOnServer(tEnd, dt) {
   return new Promise((resolve, reject) => {
     serverRun = { accum: { time: [], signals: {}, labels: {} }, lastDraw: 0, resolve, reject };
-    serverWs.send(JSON.stringify({ cmd: "run", diagram: model, t_end: tEnd, dt }));
+    const mode = document.getElementById("inRT").checked ? "realtime" : "sim";
+    serverWs.send(JSON.stringify({ cmd: "run", diagram: model, t_end: tEnd, dt, mode }));
   });
 }
 function stopServer() {
@@ -1138,9 +1142,12 @@ async function runSim() {
       status("로컬 서버에서 실행 중…", "busy");
       const stats = await runOnServer(tEnd, dt);
       drawScopes(toScopeCards(serverRun.accum));
+      const rt = stats.timing
+        ? ` | 실시간 지터 p99 ${stats.timing.p99.toFixed(2)}ms, miss ${stats.timing.miss_pct.toFixed(2)}%`
+        : "";
       status(stats.stopped
-        ? `정지됨 — ${stats.steps} steps 진행 (로컬 서버)`
-        : `완료 — ${stats.steps} steps, RK4 (로컬 서버), ${stats.elapsed_s.toFixed(2)}s`, "ok");
+        ? `정지됨 — ${stats.steps} steps 진행 (로컬 서버)${rt}`
+        : `완료 — ${stats.steps} steps, RK4 (로컬 서버), ${stats.elapsed_s.toFixed(2)}s${rt}`, "ok");
     } else {                              // ---- Pyodide 모드 ----
       btn.disabled = true;
       if (!enginePromise) status("파이썬 엔진(Pyodide) 로딩 중 — 최초 1회 ~5초 걸립니다…", "busy");

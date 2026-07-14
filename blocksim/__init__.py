@@ -13,3 +13,4 @@ from .blocks import (
 from .sim import Simulator, run, flatten
 from .viz import export_json, render_html, save_json, load_json
 from .webapi import run_simulation
+from .realtime import run_realtime

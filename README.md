@@ -12,6 +12,8 @@ Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬
 | `blocksim/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
 | `blocksim/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 + 이산 상태 실행 | 수치적분, 안정성, 계층 구조 |
 | `blocksim/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
+| `blocksim/realtime.py` | **실시간 모드**: `run_realtime()` — 절대 데드라인 + hybrid sleep 페이서, 지터 계측 | 실시간 시스템, 스케줄링 |
+| `examples/ex5_realtime_demo.py` | P40 데모(이산 PI 50Hz)를 뷰어에서 라이브로 | 실시간 vs 배치 |
 | `examples/ex1_pi_closed_loop.py` | PI 제어 폐루프 (2차 플랜트) | 폐루프, 정상상태 오차 0 |
 | `examples/ex2_pendulum_pyfunction.py` | 비선형 진자 + PD (PyFunction) | 왜 적분항이 필요한가 |
 | `examples/ex3_subsystem.py` | 마스크 PI 서브시스템 (`Gain(k="$Kp")`) | 계층화, flatten, 마스크 |
@@ -100,6 +102,27 @@ python -m blocksim.server         # ws://localhost:8765
   프로토콜/구조는 `blocksim/server.py` docstring 참조.
 - 두 모드는 같은 파이썬 엔진을 부르므로 결과가 동일하다
   (`tests/test_server.py` 가 ex1~ex4 로 검증).
+
+### 실시간 모드 (external mode) — [CLD-P42]
+
+서버 모드에서는 **"실시간" 체크박스**가 나타난다. 켜고 실행하면 시뮬레이션
+시간이 벽시계에 1:1 로 페이싱되어 **Scope 가 라이브로 흐르고**, 완료 시
+상태줄에 지터 통계(p99/miss율)가 표시된다. 실기체 블록(Bebop/ROS2/MAVLink)과
+HILS 는 전부 이 모드 위에 얹힌다.
+
+```python
+from blocksim import run_realtime
+stats = run_realtime(bd, t_end=10.0, dt=0.02)          # 50Hz, 벽시계 10초
+stats = run_realtime(bd, t_end=10.0, dt=0.02, speed=2) # 2배속
+# stats: p50/p95/p99/max/miss_pct/burst + stopped/elapsed_s
+```
+
+- 수치 결과는 배치 `run()` 과 **비트 단위로 동일** — 페이싱은 스텝 사이의
+  대기일 뿐 적분에 관여하지 않는다 (`tests/test_realtime.py` 검증).
+- 스케줄러(절대 데드라인 + coarse sleep/fine busy-wait)는 P40 재검증에서
+  250Hz p99 4.002ms 를 실측한 그 코드다 (`blocksim/realtime.py` 공용).
+- 데모: `python examples/ex5_realtime_demo.py` → 서버 켜고 ex5_diagram.html
+  에서 "실시간" 체크 후 실행.
 
 ## 실시간 성능 (실측, 2026-07-14)
 

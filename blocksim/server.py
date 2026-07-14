@@ -9,12 +9,19 @@ Pyodide 모드로 자동 폴백한다. HILS(실제 Pixhawk)와 실시간 러너(
 브라우저 샌드박스 밖이 필요하므로 이 모드에서만 동작한다.
 
 프로토콜 (WebSocket, JSON):
-  client→server: {"cmd": "run", "diagram": {...}, "t_end": 10, "dt": 0.004}
+  client→server: {"cmd": "run", "diagram": {...}, "t_end": 10, "dt": 0.004,
+                  "mode": "sim" | "realtime"}          # 기본 "sim"
   client→server: {"cmd": "stop"}
   server→client: {"type": "progress", "t": 3.2,
                   "signals_chunk": {"time": [...], "signals": {...}, "labels": {...}}}
-  server→client: {"type": "done", "stats": {"steps": N, "elapsed_s": s, "stopped": bool}}
+  server→client: {"type": "done", "stats": {"steps": N, "elapsed_s": s, "stopped": bool,
+                  "mode": "...", "timing": {...}}}     # timing 은 realtime 모드만 (지터 통계)
   server→client: {"type": "error", "message": "..."}
+
+실행 모드 [CLD-P42]:
+  sim      — 최대 속도 배치 실행 (결과가 목적)
+  realtime — 벽시계 1:1 페이싱 (blocksim.realtime 스케줄러; 뷰어 Scope 가
+             라이브로 흐른다 = external mode. HILS/실기체 블록의 기반)
 
 스레딩 구조 (중요 — 실시간 모드의 기반):
   **physics never waits for the viewer.**
@@ -34,6 +41,7 @@ import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from .realtime import JitterMeter, Pacer
 from .sim import Simulator
 from .viz import load_json
 from .webapi import MAX_STEPS, _scope_paths
@@ -57,13 +65,15 @@ def _put_drop_oldest(q, item):
                 pass
 
 
-def _sim_worker(model, t_end, dt, out_q, stop_evt):
+def _sim_worker(model, t_end, dt, mode, out_q, stop_evt):
     """전용 스레드: 시뮬레이션을 돌리며 Scope 증분을 청크로 내보낸다."""
     try:
         if not (t_end > 0 and dt > 0):
             raise ValueError("t_end, dt 는 양수여야 합니다.")
         if t_end / dt > MAX_STEPS:
             raise ValueError(f"스텝 수가 너무 큽니다 (t_end/dt ≤ {MAX_STEPS:,}).")
+        if mode not in ("sim", "realtime"):
+            raise ValueError(f"알 수 없는 mode: {mode!r} ('sim' 또는 'realtime')")
         bd = load_json(model)
         scopes = _scope_paths(bd)
         labels = {disp: list(s.labels) for disp, s in scopes}
@@ -91,8 +101,14 @@ def _sim_worker(model, t_end, dt, out_q, stop_evt):
                 chunk = {"time": [], "signals": {}, "labels": {}}
             _put_drop_oldest(out_q, {"type": "progress", "t": t_now, "signals_chunk": chunk})
 
+        # realtime 모드: 벽시계 페이싱 + 지터 계측 (sim 모드는 최대 속도)
+        pacer = Pacer(dt) if mode == "realtime" else None
+        meter = JitterMeter(dt) if mode == "realtime" else None
+
         steps = 0
         for step, t in sim.iter_run(t_end, dt):
+            if meter:
+                meter.tick()
             steps, t_now = step + 1, t
             if stop_evt.is_set():
                 stopped = True
@@ -101,10 +117,15 @@ def _sim_worker(model, t_end, dt, out_q, stop_evt):
             if now - last_flush >= CHUNK_WALL_S:
                 flush()
                 last_flush = now
+            if pacer:
+                pacer.wait()          # 스텝 경계에서만 대기 — 적분에는 무관
         flush()   # 남은 증분
+        stats = {"steps": steps, "elapsed_s": time.monotonic() - t0,
+                 "stopped": stopped, "mode": mode}
+        if meter:
+            stats["timing"] = meter.stats()
         # done/error 는 유실되면 안 되므로 블로킹 put (물리는 이미 끝났다)
-        out_q.put({"type": "done", "stats": {
-            "steps": steps, "elapsed_s": time.monotonic() - t0, "stopped": stopped}})
+        out_q.put({"type": "done", "stats": stats})
     except Exception as e:
         out_q.put({"type": "error", "message": str(e)})
 
@@ -140,7 +161,7 @@ async def _handle(ws):
                 threading.Thread(
                     target=_sim_worker,
                     args=(msg["diagram"], float(msg["t_end"]), float(msg["dt"]),
-                          out_q, stop_evt),
+                          msg.get("mode", "sim"), out_q, stop_evt),
                     daemon=True).start()
                 pump_task = asyncio.ensure_future(_pump(ws, out_q))
             elif cmd == "stop":

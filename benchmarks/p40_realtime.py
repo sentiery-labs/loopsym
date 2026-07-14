@@ -46,6 +46,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from blocksim import Diagram, Integrator, PyFunction, Scope, Simulator  # noqa: E402
+from blocksim.realtime import hybrid_sleep, pin_to_core                 # noqa: E402  (공용 스케줄러 [P42])
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HERE, "results")
@@ -195,27 +196,6 @@ def spawn_headless_client(port=WS_PORT):
 
 
 # ---------------------------------------------------------------- 측정 루프
-def pin_to_core():
-    try:
-        os.sched_setaffinity(0, {os.sched_getaffinity(0).pop()})
-        return True
-    except (AttributeError, PermissionError, OSError) as e:
-        print(f"  [경고] CPU 고정 실패 ({e}) — 그대로 진행")
-        return False
-
-
-def hybrid_sleep(deadline_ns):
-    """coarse sleep (deadline-1ms 까지) + fine busy-wait. sleep 해상도 한계 회피."""
-    while True:
-        now = time.perf_counter_ns()
-        remain = deadline_ns - now
-        if remain <= 0:
-            return
-        if remain > 1_200_000:                            # 1.2ms 이상 남음 -> sleep
-            time.sleep((remain - 1_000_000) / 1e9)
-        # 마지막 ~1ms 는 spin
-
-
 def run_bench(hz, duration_s, server=None, mavlink=True):
     """한 주파수 측정. 반환: (스텝 간격[ms], 물리 시간[ms]) numpy 배열.
 
@@ -234,7 +214,8 @@ def run_bench(hz, duration_s, server=None, mavlink=True):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     mav = mav2.MAVLink(None, srcSystem=1, srcComponent=1)
 
-    pin_to_core()
+    if not pin_to_core():
+        print("  [경고] CPU 고정 실패 — 그대로 진행")
 
     intervals = np.zeros(n, dtype=np.int64)               # 스텝 간격 [ns]
     phys = np.zeros(n, dtype=np.int64)                    # 물리(그래프) 시간 [ns]

@@ -12,7 +12,7 @@ const cases = JSON.parse(readFileSync(process.env.BS_CASES, "utf-8"));
 
 const py = await loadPyodide();
 py.FS.mkdirTree("/app/blocksim");
-for (const f of ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py"])
+for (const f of ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py"])
   py.FS.writeFile("/app/blocksim/" + f, readFileSync(join(srcDir, f), "utf-8"));
 py.runPython('import sys; sys.path.insert(0, "/app")');
 const run = py.runPython("from blocksim.webapi import run_simulation; run_simulation");
