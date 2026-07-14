@@ -14,6 +14,8 @@ Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬
 | `blocksim/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
 | `blocksim/realtime.py` | **실시간 모드**: `run_realtime()` — 절대 데드라인 + hybrid sleep 페이서, 지터 계측 | 실시간 시스템, 스케줄링 |
 | `examples/ex5_realtime_demo.py` | P40 데모(이산 PI 50Hz)를 뷰어에서 라이브로 | 실시간 vs 배치 |
+| `blocksim/ros2.py` | **ROS2 블록**: `Ros2Subscribe`/`Ros2Publish` — 다이어그램이 곧 rclpy 노드 | 미들웨어, ZOH/지연 |
+| `examples/ex6_ros2_turtlesim.py` | turtlesim go-to-goal — 블록 제어기가 실제 ROS2 토픽 폐루프 | 실기체로 가는 다리 |
 | `examples/ex1_pi_closed_loop.py` | PI 제어 폐루프 (2차 플랜트) | 폐루프, 정상상태 오차 0 |
 | `examples/ex2_pendulum_pyfunction.py` | 비선형 진자 + PD (PyFunction) | 왜 적분항이 필요한가 |
 | `examples/ex3_subsystem.py` | 마스크 PI 서브시스템 (`Gain(k="$Kp")`) | 계층화, flatten, 마스크 |
@@ -123,6 +125,22 @@ stats = run_realtime(bd, t_end=10.0, dt=0.02, speed=2) # 2배속
   250Hz p99 4.002ms 를 실측한 그 코드다 (`blocksim/realtime.py` 공용).
 - 데모: `python examples/ex5_realtime_demo.py` → 서버 켜고 ex5_diagram.html
   에서 "실시간" 체크 후 실행.
+
+### ROS2 블록 — [CLD-P44a]
+
+`Ros2Subscribe`(토픽→스칼라, sample_time 마다 ZOH 스냅샷 = 한 샘플 지연)와
+`Ros2Publish`(스칼라→토픽, major step 에서만 발행)로 **다이어그램이 곧
+ROS2 노드**가 된다. rclpy 는 블록을 만들 때만 임포트되므로 코어 무의존성
+그대로 (Pyodide 에서는 실행 시 안내 에러). 수신 콜백은 rclpy 스핀
+스레드에서 래치만 갱신 — 제어 루프는 절대 블로킹하지 않는다.
+
+```bash
+python examples/ex6_ros2_turtlesim.py   # turtlesim 자동 기동 → go-to-goal
+# 실측: 목표 도달 0.000m, 50Hz 지터 p99 20.16ms, miss 0%
+```
+
+검증: `tests/test_ros2.py` — 같은 다이어그램 안 Publish→DDS→Subscribe
+루프백, defaults, JSON 라운드트립, major-step 단일 발행 (rclpy 없으면 skip).
 
 ## 실시간 성능 (실측, 2026-07-14)
 

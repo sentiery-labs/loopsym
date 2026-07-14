@@ -350,8 +350,15 @@ const LIB = {
     defaults: { index: 0 }, summary: () => "" },
   Scope: { cat: "sink", tag: "scope", nIn: b => b.params.n_in | 0, nOut: () => 0,
     defaults: { n_in: 1, labels: ["in0"] }, summary: p => `${p.n_in} ch` },
+  // ROS2 블록: 실행은 로컬 서버 모드(rclpy)에서만 — Pyodide 는 에러 안내
+  Ros2Subscribe: { cat: "ros2", tag: "ros2 sub", nIn: () => 0, nOut: b => (b.params.fields || []).length,
+    defaults: { topic: "/turtle1/pose", msg_type: "turtlesim/msg/Pose", fields: ["x", "y", "theta"], st: 0.02 },
+    summary: p => String(p.topic) },
+  Ros2Publish: { cat: "ros2", tag: "ros2 pub", nIn: b => (b.params.fields || []).length, nOut: () => 0,
+    defaults: { topic: "/turtle1/cmd_vel", msg_type: "geometry_msgs/msg/Twist", fields: ["linear.x", "angular.z"] },
+    summary: p => String(p.topic) },
 };
-const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)" };
+const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();
@@ -866,7 +873,7 @@ function ungroup(sub) {
 /* ---------------- 팔레트 ---------------- */
 const palette = document.getElementById("bsPalette");
 {
-  const groups = { source: "Sources", math: "Math · Function", state: "Continuous", discrete: "Discrete", sub: "Subsystem", sink: "Sinks" };
+  const groups = { source: "Sources", math: "Math · Function", state: "Continuous", discrete: "Discrete", sub: "Subsystem", sink: "Sinks", ros2: "ROS2" };
   for (const cat in groups) {
     const h = document.createElement("div");
     h.className = "pal-head"; h.textContent = groups[cat];
@@ -1011,7 +1018,7 @@ const PYODIDE_URLS = [
   "../blocksim/pyodide/pyodide.js",
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.js`,
 ];
-const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py"];
+const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py", "ros2.py"];
 let enginePromise = null;   // Promise<run_simulation> — 최초 1회만 로드하고 재사용
 
 function loadScriptTag(src) {
