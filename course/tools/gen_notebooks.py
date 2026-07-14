@@ -34,9 +34,9 @@ NB[1] = [
        "- 시뮬레이션 = \"시간 t 를 조금씩 흘리며 시스템의 값을 계산하는 것\"\n"
        "- 신호는 `f(t) -> 값` 인 함수로 표현할 수 있다\n"
        "- 파이썬 기초: 변수, 함수 정의(`def`), 기본 인자, 리스트, `for`"),
-    code("# 완성된 미래를 미리 구경 — 정식 blocksim 으로 PI 폐루프 (읽기만!)\n"
+    code("# 완성된 미래를 미리 구경 — 정식 loopsym 으로 PI 폐루프 (읽기만!)\n"
          "import sys; sys.path.insert(0, '../..')\n"
-         "from blocksim import *\n"
+         "from loopsym import *\n"
          "bd = Diagram()\n"
          "ref = bd.add(Step(t_on=1.0)); err = bd.add(Sum('+-'))\n"
          "ctrl = bd.add(PyFunction('3.0*u0', n_in=1)); plant = bd.add(TransferFunction([1],[1,2,1]))\n"
@@ -193,18 +193,18 @@ NB[6] = [
          "    print(f'dt={dt}:  euler 오차 {decay(\"euler\", dt):.2e}   rk4 오차 {decay(\"rk4\", dt):.2e}')"),
     md("## 과제\n"
        "1. 위 표를 채워 \"오일러 오차 ∝ dt, RK4 ∝ dt⁴\" 를 확인 (리포트)\n"
-       "2. 채점기의 마지막 시험: **네 엔진의 PI 폐루프가 정식 blocksim 과\n"
+       "2. 채점기의 마지막 시험: **네 엔진의 PI 폐루프가 정식 loopsym 과\n"
        "   1e-9 이내로 일치**해야 한다 — 통과하면 네 엔진은 진짜다."),
     GRADE(6),
 ]
 
 NB[7] = [
-    md("# 7주차 — 폐루프 완성 + ★브리지: 내 엔진 ↔ 진짜 blocksim★\n\n"
+    md("# 7주차 — 폐루프 완성 + ★브리지: 내 엔진 ↔ 진짜 loopsym★\n\n"
        "**완성된 엔진 (1~6주차의 전부)**\n```\n"
        "ref → [err] → [PI 제어기] → [플랜트 (적분기 2개)] → scope\n"
        "  ▲──────────────── 피드백 ─────────────────────────┘\n```\n"
        "mybs.py = 지난 6주의 완성본 (제공). 오늘은 이 엔진으로 루프를 닫고,\n"
-       "같은 모델을 정식 blocksim 으로 돌려 **6자리까지 같은 숫자**를 확인한다.\n"
+       "같은 모델을 정식 loopsym 으로 돌려 **6자리까지 같은 숫자**를 확인한다.\n"
        "그 순간이 전반부의 졸업식이다."),
     md("## 이론 요약\n"
        "- P 만: 빠르지만 정상상태 오차가 남는다 (오차가 있어야 출력이 나오므로)\n"
@@ -217,9 +217,9 @@ NB[7] = [
          "mybs.simulate(bd, 10.0, 0.01)\n"
          "plt.plot(sc.t, sc.data[0]); plt.grid(True)\n"
          "print('내 엔진  y(10s) =', f'{sc.data[0][-1]:.6f}',  ' (기준값 1.000189)')"),
-    code("# ★브리지: 같은 문제를 정식 blocksim(전달함수 플랜트)으로\n"
+    code("# ★브리지: 같은 문제를 정식 loopsym(전달함수 플랜트)으로\n"
          "import sys; sys.path.insert(0, '../..')\n"
-         "import blocksim as bs\n"
+         "import loopsym as bs\n"
          "bd2 = bs.Diagram()\n"
          "ref = bd2.add(bs.Step(t_on=1.0)); err = bd2.add(bs.Sum('+-'))\n"
          "kp = bd2.add(bs.Gain(3.0)); it = bd2.add(bs.Integrator()); ki = bd2.add(bs.Gain(2.0))\n"
@@ -229,10 +229,10 @@ NB[7] = [
          "bd2.connect(err, it); bd2.connect(it, ki); bd2.connect(kp, pi[0]); bd2.connect(ki, pi[1])\n"
          "bd2.connect(pi, plant); bd2.connect(plant, sc2)\n"
          "bs.run(bd2, 10.0, 0.01)\n"
-         "print('blocksim y(10s) =', f'{sc2.data[0][-1]:.6f}')\n"
+         "print('loopsym y(10s) =', f'{sc2.data[0][-1]:.6f}')\n"
          "print('최대차 =', max(abs(a-b) for a,b in zip(sc.data[0], sc2.data[0])))"),
     md("## 과제\n"
-       "1. `build_pi_loop` — 위 그림대로 (채점: 기준값 + blocksim 전 구간 대조)\n"
+       "1. `build_pi_loop` — 위 그림대로 (채점: 기준값 + loopsym 전 구간 대조)\n"
        "2. `build_pendulum` — 비선형 진자 + PD (ex2). θ 가 0.8 에 못 가는 이유를\n"
        "   한 문단으로 쓰라 (가산점: I 를 추가해 오차를 없애 보라)\n\n"
        "**다음 주 예고**: 이제 정식 플랫폼으로 갈아탄다 — 8주차, 6-DoF 쿼드로터가\n"

@@ -21,7 +21,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (            # noqa: E402
+from loopsym import (            # noqa: E402
     Diagram, DiscreteIntegrator, Gain, Inport, Integrator, Outport,
     PyFunction, Scope, Step, Subsystem, Sum, TransferFunction,
     export_json, run, run_simulation,
@@ -144,7 +144,7 @@ def test_pyodide_matches_python_engine(tmp_path):
 
     cf = tmp_path / "cases.json"
     cf.write_text(json.dumps(cases), encoding="utf-8")
-    env = dict(os.environ, BS_SRC_DIR=os.path.join(ROOT, "blocksim"), BS_CASES=str(cf))
+    env = dict(os.environ, BS_SRC_DIR=os.path.join(ROOT, "loopsym"), BS_CASES=str(cf))
     out = subprocess.run([node, HARNESS], env=env, cwd=ROOT,
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
@@ -175,7 +175,7 @@ def test_pyodide_reports_errors(tmp_path):
     cf = tmp_path / "cases.json"
     cf.write_text(json.dumps([{"name": "loop", "model": model,
                                "t_end": 1.0, "dt": 0.01}]), encoding="utf-8")
-    env = dict(os.environ, BS_SRC_DIR=os.path.join(ROOT, "blocksim"), BS_CASES=str(cf))
+    env = dict(os.environ, BS_SRC_DIR=os.path.join(ROOT, "loopsym"), BS_CASES=str(cf))
     out = subprocess.run([node, HARNESS], env=env, cwd=ROOT,
                          capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
@@ -195,7 +195,7 @@ def test_run_simulation_direct():
 
 def test_viewer_has_no_js_engine():
     """AC: viewer.html 에 시뮬레이션 로직 JS 0줄 — 폐기된 엔진 심볼이 없어야 한다."""
-    src = open(os.path.join(ROOT, "blocksim", "viewer.html"), encoding="utf-8").read()
+    src = open(os.path.join(ROOT, "loopsym", "viewer.html"), encoding="utf-8").read()
     for sym in ["makeRuntime", "compileFlat", "flattenModel", "resolveMask", "compileExpr"]:
         assert sym not in src, f"폐기된 JS 엔진 심볼 잔존: {sym}"
     assert "run_simulation" in src   # Pyodide 경로는 있어야 함

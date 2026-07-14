@@ -1,4 +1,4 @@
-"""blocksim — Simulink 원리를 배우는 교육용 미니 블록 다이어그램 시뮬레이터."""
+"""loopsym — Simulink 원리를 배우는 교육용 미니 블록 다이어그램 시뮬레이터."""
 
 from .core import Block, Diagram, Port, AlgebraicLoopError
 from .blocks import (

@@ -1,9 +1,9 @@
-"""blocksim.webapi — 뷰어(JS)와 파이썬 엔진 사이의 유일한 통로.
+"""loopsym.webapi — 뷰어(JS)와 파이썬 엔진 사이의 유일한 통로.
 
 뷰어의 JS 는 시뮬레이션을 하지 않는다. 다이어그램 편집과 결과 그리기만
 하고, 실행은 이 모듈의 run_simulation() 하나로 들어온다 (Pyodide 브라우저
 런타임/로컬 서버 어느 쪽이든 같은 함수). 그래서 엔진의 의미론은 파이썬
-blocksim 한 곳에만 존재한다 — single source of truth.
+loopsym 한 곳에만 존재한다 — single source of truth.
 
 인터페이스 (JS 쪽과의 계약):
   run_simulation(diagram_json: str, t_end: float, dt: float) -> str

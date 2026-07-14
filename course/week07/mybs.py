@@ -1,13 +1,13 @@
-"""mybs — 1~6주차에 우리 손으로 만든 미니 blocksim (7주차 제공 완성본).
+"""mybs — 1~6주차에 우리 손으로 만든 미니 loopsym (7주차 제공 완성본).
 
-정식 blocksim 의 축소판: 스칼라 신호, 연속 블록, 고정 스텝 오일러/RK4.
+정식 loopsym 의 축소판: 스칼라 신호, 연속 블록, 고정 스텝 오일러/RK4.
 (서브시스템·이산 블록·마스크는 정식판에만 있다 — 심화 과제 참조.)
 
 의미론은 정식판과 동일하게 맞췄다:
   1) feedthrough=False 블록(적분기)의 출력을 먼저 계산 — 피드백 고리가 끊긴다
   2) feedthrough 블록은 위상 정렬 순서로
   3) 상태 미분을 모아 오일러/RK4 한 스텝
-그래서 같은 다이어그램이면 정식 blocksim 과 같은 숫자가 나온다 (7주차 브리지).
+그래서 같은 다이어그램이면 정식 loopsym 과 같은 숫자가 나온다 (7주차 브리지).
 """
 
 import math
@@ -307,7 +307,7 @@ def simulate(bd, t_end, dt=0.01, method="rk4"):
         if method == "euler":
             k1 = f(t, x)
             x = [xi + dt * d for xi, d in zip(x, k1)]
-        else:                             # RK4 (정식 blocksim 과 동일)
+        else:                             # RK4 (정식 loopsym 과 동일)
             k1 = f(t, x)
             k2 = f(t + dt / 2, [xi + dt / 2 * k for xi, k in zip(x, k1)])
             k3 = f(t + dt / 2, [xi + dt / 2 * k for xi, k in zip(x, k2)])

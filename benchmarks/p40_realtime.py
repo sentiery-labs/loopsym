@@ -4,7 +4,7 @@
 측정이었다. 여기서는 실제 HILS 조건을 전부 동시에 걸고 측정한다:
 
   1. 물리 부하  : 13-상태 6-DoF 쿼드로터(pos3·vel3·quat4·omega3)를 RK4 로
-                  매 스텝 적분. numpy 기반 동역학을 **blocksim 블록 그래프
+                  매 스텝 적분. numpy 기반 동역학을 **loopsym 블록 그래프
                   경유**(Simulator.iter_run — 직접 함수 호출이 아니라 프레임
                   워크 오버헤드 포함)로 실행.
   2. I/O 부하   : pymavlink 로 매 스텝 HIL_SENSOR 인코딩 + UDP localhost 송신.
@@ -45,12 +45,12 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import Diagram, Integrator, PyFunction, Scope, Simulator  # noqa: E402
-from blocksim.realtime import hybrid_sleep, pin_to_core                 # noqa: E402  (공용 스케줄러 [P42])
+from loopsym import Diagram, Integrator, PyFunction, Scope, Simulator  # noqa: E402
+from loopsym.realtime import hybrid_sleep, pin_to_core                 # noqa: E402  (공용 스케줄러 [P42])
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(HERE, "results")
-WS_PORT = 8877          # 뷰어 스트리밍 부하용 (blocksim.server 의 8765 와 무관)
+WS_PORT = 8877          # 뷰어 스트리밍 부하용 (loopsym.server 의 8765 와 무관)
 MAVLINK_ADDR = ("127.0.0.1", 14550)
 
 # ---------------------------------------------------------------- 6-DoF 물리
@@ -106,7 +106,7 @@ def quad_dynamics(t, *u):
 
 
 def build_quad_diagram():
-    """물리를 blocksim 블록 그래프로: 13 Integrator + 동역학 PyFunction + 모터 4."""
+    """물리를 loopsym 블록 그래프로: 13 Integrator + 동역학 PyFunction + 모터 4."""
     bd = Diagram()
     dyn = bd.add(PyFunction(func=quad_dynamics, n_in=17, n_out=13, name="dyn"))
     integs = []
@@ -284,7 +284,7 @@ def write_report(all_stats, duration_s, direct_ms=None):
     today = datetime.date.today().strftime("%Y%m%d")
     path = os.path.join(RESULTS_DIR, f"{today}_p40.md")
     L = [f"# P40 재검증 — 현실 부하 실시간 지터 ({datetime.date.today()})", ""]
-    L += ["측정 조건 (전부 동시): 13-상태 6-DoF 쿼드 RK4 를 **blocksim 블록 그래프 경유**로 매 스텝 적분",
+    L += ["측정 조건 (전부 동시): 13-상태 6-DoF 쿼드 RK4 를 **loopsym 블록 그래프 경유**로 매 스텝 적분",
           "+ pymavlink HIL_SENSOR 인코딩/UDP 송신 매 스텝 + WebSocket 10Hz 상태 스트리밍(헤드리스 클라이언트 연결)",
           f"+ GC 기본 상태 + 일반 데스크탑 부하. 각 주파수 {duration_s:.0f}s.",
           "타이밍: 절대 데드라인 + coarse sleep/fine busy-wait 하이브리드, CPU 1코어 고정.", ""]

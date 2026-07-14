@@ -3,16 +3,17 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# ※제품명 미확정 (WORKPLAN §7-2) — PyPI 공개 전 이름 결정 필요. 임시 이름.
-name = "blocksim-edu"
+name = "loopsym"
 version = "0.1.0"
-description = "Simulink 원리를 배우는 교육용 파이썬 블록 다이어그램 시뮬레이터 (인터랙티브 뷰어 포함)"
+description = "Visual block-diagram simulation for control systems and robotics"
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "chungh6577" }]
-keywords = ["simulation", "block-diagram", "control", "education", "simulink"]
+license = { text = "Apache-2.0" }
+authors = [{ name = "Sentiery" }]
+keywords = ["simulation", "block-diagram", "control-systems", "drone", "education", "px4"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
     "Topic :: Education",
     "Topic :: Scientific/Engineering",
 ]
@@ -20,14 +21,14 @@ dependencies = []            # 코어는 순수 파이썬 — 의존성 0 (교�
 
 [project.optional-dependencies]
 examples = ["matplotlib"]
-server = ["fastapi", "uvicorn"]          # 로컬 서버 모드 (python -m blocksim.server)
+server = ["fastapi", "uvicorn"]          # 로컬 서버 모드 (python -m loopsym.server)
 dev = ["pytest", "matplotlib", "fastapi", "uvicorn", "websockets"]
 
 [tool.setuptools]
-packages = ["blocksim"]
+packages = ["loopsym"]
 
 [tool.setuptools.package-data]
-blocksim = ["viewer.html"]
+loopsym = ["viewer.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

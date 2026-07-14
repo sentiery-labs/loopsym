@@ -3,7 +3,7 @@
 하이브리드 커리큘럼(`docs/curriculum_15weeks.md`)의 **전반부 1~7주차** 자료.
 후반부(8~15주, 팔레트 개방)는 P61/P65/P62/P64 완료 후 제작.
 
-> ⚠ **배포 주의**: WORKPLAN §7-1 — 코어(blocksim)는 공개 후보지만
+> ⚠ **배포 주의**: WORKPLAN §7-1 — 코어(loopsym)는 공개 후보지만
 > **course/ (과제·채점기·정답)는 비공개 유료 콘텐츠 후보**다.
 > repo 공개 전 이 폴더 분리를 결정할 것. 특히 `solutions/` 는 학생에게
 > 절대 배포 금지.
@@ -14,7 +14,7 @@
 weekNN/
   weekNN.ipynb      # 수업 노트북 (목표/이론 요약/실습/과제/채점 셀)
   *.py              # 뼈대 코드 (# TODO — 학생이 채우는 파일) + 제공 코드
-  test_weekNN.py    # 채점기 (pytest) — blocksim 정식 구현이 정답 오라클
+  test_weekNN.py    # 채점기 (pytest) — loopsym 정식 구현이 정답 오라클
 solutions/          # 교사용 정답 (뼈대 파일 드롭인 대체) — 비공개!
 tools/
   gen_given.py      # '제공 코드'와 정답 일부를 week07/mybs.py 에서 생성 (정본 1개)
@@ -32,7 +32,7 @@ python -m pytest test_week01.py -q   # 전부 초록 = 이번 주 완료
 ## 강사/운영
 
 - **채점**: 학생의 weekNN 폴더에서 `python -m pytest test_weekNN.py -q`
-  (레포 루트가 PYTHONPATH 에 있어야 blocksim 오라클 임포트 가능 —
+  (레포 루트가 PYTHONPATH 에 있어야 loopsym 오라클 임포트 가능 —
   course/weekNN 안에서 실행하면 채점기가 알아서 경로를 잡는다).
 - **채점기 신뢰성**: `tests/test_course_graders.py` 가 자동 검증 —
   정답을 넣으면 전 주차 PASS, 뼈대 그대로면 전 주차 FAIL 이어야 한다.
@@ -45,8 +45,8 @@ python -m pytest test_week01.py -q   # 전부 초록 = 이번 주 완료
 
 - 각 주차 폴더는 **자기완결**: 지난주 완성본을 '제공 코드'로 포함 —
   뒤처진 학생도 매주 새로 출발할 수 있다.
-- 채점 기준은 언제나 **정식 blocksim 과의 수치 비교** (오라클 방식) —
+- 채점 기준은 언제나 **정식 loopsym 과의 수치 비교** (오라클 방식) —
   7주차 브리지에서 회귀 기준값(ex1 y(10s)=1.000189, ex2 θ(8s)=0.306499)
   6자리 대조가 전반부 졸업 시험이다.
-- 미니 엔진(mybs)은 blocksim 과 **비트 단위로 같은 결과**를 내도록
+- 미니 엔진(mybs)은 loopsym 과 **비트 단위로 같은 결과**를 내도록
   의미론을 맞췄다 (2단계 평가 + RK4 동일 구현).

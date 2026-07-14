@@ -1,4 +1,4 @@
-"""6주차 채점기 — 적분기·오일러·RK4. 최종전: 폐루프가 blocksim 과 일치해야 한다."""
+"""6주차 채점기 — 적분기·오일러·RK4. 최종전: 폐루프가 loopsym 과 일치해야 한다."""
 
 import math
 import os
@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 import myblocks as mb                                   # noqa: E402
 import mysim                                            # noqa: E402
 from mydiagram import Diagram                           # noqa: E402
-import blocksim as bs                                   # noqa: E402
+import loopsym as bs                                   # noqa: E402
 
 
 def test_integrator_interface():
@@ -54,7 +54,7 @@ def test_scope_records_every_major_step():
 
 
 def _pi_loop(engine):
-    """같은 PI 폐루프를 학생 엔진/blocksim 양쪽에 짓는다 (플랜트 = 적분기 2개)."""
+    """같은 PI 폐루프를 학생 엔진/loopsym 양쪽에 짓는다 (플랜트 = 적분기 2개)."""
     if engine == "mine":
         D, C, S, G, I, SC = Diagram, mb.Constant, mb.Sum, mb.Gain, mb.Integrator, mb.Scope
         step = mb.Step(t_on=1.0)
@@ -75,12 +75,12 @@ def _pi_loop(engine):
     return bd, sc
 
 
-def test_closed_loop_matches_blocksim():
-    """★내 엔진의 폐루프 응답이 정식 blocksim 과 1e-9 이내 — 6주차 졸업 시험."""
+def test_closed_loop_matches_loopsym():
+    """★내 엔진의 폐루프 응답이 정식 loopsym 과 1e-9 이내 — 6주차 졸업 시험."""
     bd_m, sc_m = _pi_loop("mine")
     mysim.simulate(bd_m, 10.0, 0.01)
     bd_o, sc_o = _pi_loop("oracle")
     bs.run(bd_o, 10.0, 0.01)
     assert len(sc_m.data[0]) == len(sc_o.data[0])
     err = max(abs(a - b) for a, b in zip(sc_m.data[0], sc_o.data[0]))
-    assert err < 1e-9, f"blocksim 과 최대차 {err}"
+    assert err < 1e-9, f"loopsym 과 최대차 {err}"

@@ -1,6 +1,6 @@
-"""로컬 서버 모드(blocksim/server.py) 통합 테스트.
+"""로컬 서버 모드(loopsym/server.py) 통합 테스트.
 
-실제로 `python -m blocksim.server` 서브프로세스를 띄우고 websockets
+실제로 `python -m loopsym.server` 서브프로세스를 띄우고 websockets
 클라이언트(뷰어의 서버 모드와 같은 프로토콜)로:
   1. ex1~ex4 회귀 — 결과가 네이티브 엔진(= Pyodide 모드와 동일 코드)과 일치
   2. 시뮬레이션 중 stop 이 1초 안에 반영
@@ -22,7 +22,7 @@ ws_sync = pytest.importorskip("websockets.sync.client")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import Scope, export_json, run          # noqa: E402
+from loopsym import Scope, export_json, run          # noqa: E402
 from tests.test_pyodide_smoke import CASES            # noqa: E402  (ex1~ex4 모델 공유)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -34,7 +34,7 @@ def server():
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     proc = subprocess.Popen(
-        [sys.executable, "-m", "blocksim.server", "--port", str(port)],
+        [sys.executable, "-m", "loopsym.server", "--port", str(port)],
         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     url = f"ws://127.0.0.1:{port}/ws"
     try:

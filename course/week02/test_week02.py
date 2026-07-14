@@ -1,4 +1,4 @@
-"""2주차 채점기 — 블록 규약 + 출력을 blocksim 오라클과 대조."""
+"""2주차 채점기 — 블록 규약 + 출력을 loopsym 오라클과 대조."""
 
 import os
 import sys
@@ -8,7 +8,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
 import myblocks as mb                                   # noqa: E402
-import blocksim as bs                                   # noqa: E402
+import loopsym as bs                                   # noqa: E402
 
 US = [-3.0, -1.0, -0.2, 0.0, 0.7, 1.0, 2.5, 100.0]
 

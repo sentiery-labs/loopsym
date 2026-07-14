@@ -15,11 +15,11 @@ rclpy = pytest.importorskip("rclpy", reason="rclpy 없음 — ROS2 환경에서 
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (            # noqa: E402
+from loopsym import (            # noqa: E402
     Diagram, Gain, Ros2Publish, Ros2Subscribe, Scope, Sine,
     export_json, load_json, run_realtime,
 )
-from blocksim import ros2 as bs_ros2   # noqa: E402
+from loopsym import ros2 as bs_ros2   # noqa: E402
 
 DT = 0.02
 

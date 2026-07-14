@@ -6,7 +6,7 @@ sim 모드는 10초 시뮬레이션이 수십 ms 에 끝나지만, 실시간 모
 실기체(Bebop/ROS2/MAVLink 블록)는 전부 이 모드 위에 얹힌다.
 
 뷰어에서 라이브로 보기:
-  1. 터미널 1:  python -m blocksim.server
+  1. 터미널 1:  python -m loopsym.server
   2. 이 스크립트 실행 → ex5_diagram.html 생성
   3. 브라우저로 열기 → 좌상단 배지가 "Local Server" 인지 확인
   4. "실시간" 체크 → ▶ 실행 → Scope 가 벽시계 속도로 라이브 갱신,
@@ -18,7 +18,7 @@ sim 모드는 10초 시뮬레이션이 수십 ms 에 끝나지만, 실시간 모
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (
+from loopsym import (
     Diagram, Step, Sum, Gain, DiscreteIntegrator, TransferFunction, Scope,
     run_realtime, render_html,
 )

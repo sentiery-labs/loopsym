@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (            # noqa: E402
+from loopsym import (            # noqa: E402
     Diagram, DiscreteIntegrator, Gain, Scope, Step, Sum, TransferFunction,
     export_json, run, run_realtime,
 )

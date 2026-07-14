@@ -1,4 +1,4 @@
-"""blocksim.viz — 다이어그램 구조를 눈으로 보기.
+"""loopsym.viz — 다이어그램 구조를 눈으로 보기.
 
 export_json(bd)        : 블록/와이어/자동배치 좌표를 dict 로
 render_html(bd, path)  : viewer.html 템플릿에 모델을 심어 단독 HTML 생성.
@@ -168,7 +168,7 @@ def _engine_sources():
     return out
 
 
-def render_html(bd, path, title="blocksim viewer"):
+def render_html(bd, path, title="loopsym viewer"):
     """모델을 심은 단독 HTML 파일을 만든다. 반환: 절대 경로."""
     template = os.path.join(os.path.dirname(__file__), "viewer.html")
     with open(template, encoding="utf-8") as f:

@@ -1,20 +1,23 @@
-# blocksim — 교육용 파이썬 블록 다이어그램 시뮬레이터
+# Loopsym — visual block-diagram simulation for control systems and robotics, by Sentiery
 
-Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬으로 직접
-만들어 보는 수업용 미니 엔진. 전체가 순수 파이썬 몇 백 줄이라 학생이
-15주 안에 바닥부터 따라 만들 수 있는 규모다.
+교육용 파이썬 블록 다이어그램 시뮬레이터. Simulink 의 핵심 원리(블록·와이어·
+실행 순서·solver)를 파이썬으로 직접 만들어 보는 수업용 엔진이자, 시뮬레이션
+에서 실기체(ROS2/HILS)까지 같은 다이어그램으로 가는 드론/로봇 개발 플랫폼.
+전체가 순수 파이썬이라 학생이 한 학기에 바닥부터 따라 만들 수 있는 규모다.
+
+License: Apache-2.0 · Copyright 2026 Sentiery
 
 ## 구성
 
 | 파일 | 내용 | 수업 주제 |
 |------|------|-----------|
-| `blocksim/core.py` | `Block` 베이스 클래스, `Diagram`, 위상 정렬 + 대수 루프 검출 | 클래스/상속, 그래프 알고리즘 |
-| `blocksim/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
-| `blocksim/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 + 이산 상태 실행 | 수치적분, 안정성, 계층 구조 |
-| `blocksim/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
-| `blocksim/realtime.py` | **실시간 모드**: `run_realtime()` — 절대 데드라인 + hybrid sleep 페이서, 지터 계측 | 실시간 시스템, 스케줄링 |
+| `loopsym/core.py` | `Block` 베이스 클래스, `Diagram`, 위상 정렬 + 대수 루프 검출 | 클래스/상속, 그래프 알고리즘 |
+| `loopsym/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
+| `loopsym/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 + 이산 상태 실행 | 수치적분, 안정성, 계층 구조 |
+| `loopsym/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
+| `loopsym/realtime.py` | **실시간 모드**: `run_realtime()` — 절대 데드라인 + hybrid sleep 페이서, 지터 계측 | 실시간 시스템, 스케줄링 |
 | `examples/ex5_realtime_demo.py` | P40 데모(이산 PI 50Hz)를 뷰어에서 라이브로 | 실시간 vs 배치 |
-| `blocksim/ros2.py` | **ROS2 블록**: `Ros2Subscribe`/`Ros2Publish` — 다이어그램이 곧 rclpy 노드 | 미들웨어, ZOH/지연 |
+| `loopsym/ros2.py` | **ROS2 블록**: `Ros2Subscribe`/`Ros2Publish` — 다이어그램이 곧 rclpy 노드 | 미들웨어, ZOH/지연 |
 | `examples/ex6_ros2_turtlesim.py` | turtlesim go-to-goal — 블록 제어기가 실제 ROS2 토픽 폐루프 | 실기체로 가는 다리 |
 | `examples/ex1_pi_closed_loop.py` | PI 제어 폐루프 (2차 플랜트) | 폐루프, 정상상태 오차 0 |
 | `examples/ex2_pendulum_pyfunction.py` | 비선형 진자 + PD (PyFunction) | 왜 적분항이 필요한가 |
@@ -35,7 +38,7 @@ python3 examples/ex1_pi_closed_loop.py   # ex1_result.png + ex1_diagram.html 생
 ```
 
 ```python
-from blocksim import *
+from loopsym import *
 
 bd = Diagram()
 ref   = bd.add(Step(t_on=1.0))
@@ -61,9 +64,9 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
   가운데 세그먼트를 드래그하면 수동 배선(저장/열기 보존). 더블클릭 = 자동 복귀
 - **Shift+클릭 다중 선택 → "서브시스템으로 묶기"** (경계 Inport/Outport 자동 생성),
   더블클릭으로 내부 진입(브레드크럼/Esc 로 상위), "풀기"로 해체
-- 우측 인스펙터에서 파라미터 수정 후 ▶ 실행 — **Pyodide 가 파이썬 blocksim
+- 우측 인스펙터에서 파라미터 수정 후 ▶ 실행 — **Pyodide 가 파이썬 loopsym
   엔진을 브라우저 안에서 그대로 실행** (아래 아키텍처 참조)
-- "Python 코드" 버튼: 현재 다이어그램을 (서브시스템 포함) blocksim 스크립트로 역생성
+- "Python 코드" 버튼: 현재 다이어그램을 (서브시스템 포함) loopsym 스크립트로 역생성
 - `PyFunction` 은 식 문자열(`"6.0*(u0-u1) - 2.0*u2"`)로 쓰면 뷰어에서도 실행 가능
 
 ### 뷰어 아키텍처 — 시뮬레이션 엔진은 파이썬 하나뿐 (2026-07 변경)
@@ -75,7 +78,7 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
 "파이썬 엔진을 JS 로 포팅해 보기"는 심화 과제로 재사용 가능).
 
 - 뷰어 JS 의 역할: ① 블록 편집 ② 모델 JSON 직렬화 ③ Pyodide 로드 +
-  `blocksim.webapi.run_simulation(diagram_json, t_end, dt)` 호출 ④ Scope 렌더링
+  `loopsym.webapi.run_simulation(diagram_json, t_end, dt)` 호출 ④ Scope 렌더링
 - `render_html()` 이 만드는 HTML 에는 엔진 소스(.py)가 심어져 있어 단독으로
   동작한다. 원본 `viewer.html` 을 직접 열 때는 옆의 .py 를 fetch 하므로
   repo 를 HTTP 로 서빙해야 한다 (`python -m http.server`).
@@ -85,7 +88,7 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
   실행 경로를 헤드리스로 돌려 네이티브 엔진·회귀 기준값과 대조한다
   (repo 루트에서 `npm install` 필요; CI 에서 항상 실행).
 
-### 로컬 서버 모드 (`python -m blocksim.server`)
+### 로컬 서버 모드 (`python -m loopsym.server`)
 
 같은 뷰어가 로컬 파이썬 서버에 붙어 시뮬레이션을 돌리는 두 번째 모드.
 HILS(실제 Pixhawk 연결)와 실시간 러너는 브라우저 샌드박스 밖이 필요하므로
@@ -93,7 +96,7 @@ HILS(실제 Pixhawk 연결)와 실시간 러너는 브라우저 샌드박스 밖
 
 ```bash
 pip install -e ".[server]"        # fastapi + uvicorn
-python -m blocksim.server         # ws://localhost:8765
+python -m loopsym.server         # ws://localhost:8765
 ```
 
 - 뷰어는 페이지 로드 때 자동 감지: 서버가 있으면 좌상단 배지가
@@ -103,7 +106,7 @@ python -m blocksim.server         # ws://localhost:8765
   ▶ 버튼이 **■ 정지**로 바뀌어 긴 실행을 중단할 수 있다 (1초 내 반영).
 - 스레딩 원칙: *physics never waits for the viewer* — 시뮬 루프는 전용
   스레드, 전송은 non-blocking queue(가득 차면 오래된 청크 폐기).
-  프로토콜/구조는 `blocksim/server.py` docstring 참조.
+  프로토콜/구조는 `loopsym/server.py` docstring 참조.
 - 두 모드는 같은 파이썬 엔진을 부르므로 결과가 동일하다
   (`tests/test_server.py` 가 ex1~ex4 로 검증).
 
@@ -115,7 +118,7 @@ python -m blocksim.server         # ws://localhost:8765
 HILS 는 전부 이 모드 위에 얹힌다.
 
 ```python
-from blocksim import run_realtime
+from loopsym import run_realtime
 stats = run_realtime(bd, t_end=10.0, dt=0.02)          # 50Hz, 벽시계 10초
 stats = run_realtime(bd, t_end=10.0, dt=0.02, speed=2) # 2배속
 # stats: p50/p95/p99/max/miss_pct/burst + stopped/elapsed_s
@@ -124,7 +127,7 @@ stats = run_realtime(bd, t_end=10.0, dt=0.02, speed=2) # 2배속
 - 수치 결과는 배치 `run()` 과 **비트 단위로 동일** — 페이싱은 스텝 사이의
   대기일 뿐 적분에 관여하지 않는다 (`tests/test_realtime.py` 검증).
 - 스케줄러(절대 데드라인 + coarse sleep/fine busy-wait)는 P40 재검증에서
-  250Hz p99 4.002ms 를 실측한 그 코드다 (`blocksim/realtime.py` 공용).
+  250Hz p99 4.002ms 를 실측한 그 코드다 (`loopsym/realtime.py` 공용).
 - 데모: `python examples/ex5_realtime_demo.py` → 서버 켜고 ex5_diagram.html
   에서 "실시간" 체크 후 실행.
 

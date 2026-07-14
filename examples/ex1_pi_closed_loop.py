@@ -14,7 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from blocksim import (
+from loopsym import (
     Diagram, Step, Sum, Gain, Integrator, TransferFunction, Scope, run, render_html,
 )
 
@@ -46,7 +46,7 @@ plt.figure(figsize=(8, 4))
 for i, lab in enumerate(scope.labels):
     plt.plot(scope.t, scope.data[i], label=lab)
 plt.xlabel("time [s]"); plt.ylabel("value"); plt.legend(); plt.grid(True)
-plt.title("PI closed loop — blocksim")
+plt.title("PI closed loop — loopsym")
 out = os.path.join(os.path.dirname(__file__), "ex1_result.png")
 plt.savefig(out, dpi=110, bbox_inches="tight")
 print("plot :", out)

@@ -1,4 +1,4 @@
-"""blocksim.sim — 고정 스텝 솔버 (RK4).
+"""loopsym.sim — 고정 스텝 솔버 (RK4).
 
 Simulink 의 ode4 (Runge-Kutta, fixed-step) 에 해당한다.
 

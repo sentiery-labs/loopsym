@@ -1,4 +1,4 @@
-"""blocksim 파이썬 엔진 회귀 테스트 — WORKPLAN §6 기준값의 진실.
+"""loopsym 파이썬 엔진 회귀 테스트 — WORKPLAN §6 기준값의 진실.
 
 실행: pyblocks/ 에서  python3 -m pytest tests/ -q
 """
@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (            # noqa: E402
+from loopsym import (            # noqa: E402
     AlgebraicLoopError, Constant, Demux, Diagram, DiscreteIntegrator, Gain,
     Inport, Integrator, Mux, Outport, Product, PyFunction, Scope, Step,
     Subsystem, Sum, TransferFunction, UnitDelay, load_json, run, save_json,

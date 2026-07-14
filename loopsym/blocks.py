@@ -1,4 +1,4 @@
-"""blocksim.blocks — 표준 블록 라이브러리.
+"""loopsym.blocks — 표준 블록 라이브러리.
 
 Simulink 대응표:
   Constant, Step, Sine     <- Sources

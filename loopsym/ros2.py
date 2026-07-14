@@ -1,4 +1,4 @@
-"""blocksim.ros2 — ROS2 토픽 Subscribe/Publish 블록. [CLD-P44a]
+"""loopsym.ros2 — ROS2 토픽 Subscribe/Publish 블록. [CLD-P44a]
 
 다이어그램이 곧 ROS2 노드가 된다: run_realtime() 이 벽시계 루프를 돌고,
 Ros2Subscribe 가 소스(토픽→스칼라), Ros2Publish 가 싱크(스칼라→토픽).
@@ -7,14 +7,14 @@ Ros2Subscribe 가 소스(토픽→스칼라), Ros2Publish 가 싱크(스칼라�
     sub(/turtle1/pose) ─▶ [제어기 블록들] ─▶ pub(/turtle1/cmd_vel)
 
 원칙:
-  - rclpy 는 블록을 실제로 만들 때만 임포트 — blocksim 코어의 무의존성
+  - rclpy 는 블록을 실제로 만들 때만 임포트 — loopsym 코어의 무의존성
     유지 (rclpy 없는 환경/Pyodide 에서도 이 모듈의 임포트 자체는 안전).
   - physics never waits: 수신 콜백은 rclpy 스핀 스레드(별도)에서 돌고
     최신값 래치만 놓고 간다. 제어 루프는 래치를 읽을 뿐 절대 블로킹 없음.
   - 실시간 모드(run_realtime / 서버 "realtime")에서 쓰도록 설계.
     배치 sim 모드에서도 돌긴 하지만 벽시계보다 빨리 돌므로 의미가 없다.
 
-프로세스당 rclpy 노드 1개("blocksim")를 공유한다. 끝나면 shutdown().
+프로세스당 rclpy 노드 1개("loopsym")를 공유한다. 끝나면 shutdown().
 """
 
 import importlib
@@ -61,11 +61,11 @@ class _Bridge:
         self.rclpy = rclpy
         if not rclpy.ok():
             rclpy.init()
-        self.node = rclpy.create_node("blocksim")
+        self.node = rclpy.create_node("loopsym")
         self.executor = SingleThreadedExecutor()
         self.executor.add_node(self.node)
         self.thread = threading.Thread(target=self.executor.spin,
-                                       daemon=True, name="blocksim-ros2-spin")
+                                       daemon=True, name="loopsym-ros2-spin")
         self.thread.start()
 
 

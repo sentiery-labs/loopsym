@@ -12,7 +12,7 @@ examples/*_result.png
 examples/*_diagram.html
 
 # Pyodide (tools/vendor_pyodide.py 로 설치 — 커밋 금지)
-blocksim/pyodide/
+loopsym/pyodide/
 
 # node (Pyodide 스모크 테스트용)
 node_modules/

@@ -20,7 +20,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from blocksim import Diagram, Step, PyFunction, Integrator, Scope, run, render_html
+from loopsym import Diagram, Step, PyFunction, Integrator, Scope, run, render_html
 
 bd = Diagram()
 

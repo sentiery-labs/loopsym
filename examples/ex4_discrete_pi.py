@@ -16,7 +16,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from blocksim import (
+from loopsym import (
     Diagram, Step, Sum, Gain, Integrator, DiscreteIntegrator,
     TransferFunction, Scope, run, render_html,
 )
@@ -52,7 +52,7 @@ plt.figure(figsize=(8, 4))
 plt.plot(sc_c.t, sc_c.data[0], label="continuous PI")
 plt.plot(sc_d.t, sc_d.data[0], label=f"discrete PI (Ts={TS})", linestyle="--")
 plt.xlabel("time [s]"); plt.legend(); plt.grid(True)
-plt.title("Continuous vs Discrete PI — blocksim")
+plt.title("Continuous vs Discrete PI — loopsym")
 out = os.path.join(os.path.dirname(__file__), "ex4_result.png")
 plt.savefig(out, dpi=110, bbox_inches="tight")
 print("plot :", out)

@@ -1,4 +1,4 @@
-"""7주차 채점기 — ★브리지★: 내 엔진의 결과 = 정식 blocksim = 회귀 기준값.
+"""7주차 채점기 — ★브리지★: 내 엔진의 결과 = 정식 loopsym = 회귀 기준값.
 
 기준값 (정식판 예제 회귀값, 6자리): ex1 y(10s)=1.000189, ex2 θ(8s)=0.306499.
 """
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
 import mybs                                             # noqa: E402  (제공 엔진)
 import mymodel                                          # noqa: E402  (학생 모델)
-import blocksim as bs                                   # noqa: E402  (정답 오라클)
+import loopsym as bs                                   # noqa: E402  (정답 오라클)
 
 EX1_Y10 = 1.000189
 EX2_TH8 = 0.306499
@@ -41,14 +41,14 @@ def test_pi_loop_matches_reference():
         "회귀 기준값(1.000189)과 6자리 불일치 — 배선/게인을 확인"
 
 
-def test_pi_loop_matches_blocksim_pointwise():
-    """전 구간이 정식 blocksim(전달함수 플랜트판)과 1e-9 이내 — 브리지 완성."""
+def test_pi_loop_matches_loopsym_pointwise():
+    """전 구간이 정식 loopsym(전달함수 플랜트판)과 1e-9 이내 — 브리지 완성."""
     bd, sc = mymodel.build_pi_loop()
     mybs.simulate(bd, 10.0, 0.01)
     oracle = _oracle_ex1()
     assert len(sc.data[0]) == len(oracle)
     err = max(abs(a - b) for a, b in zip(sc.data[0], oracle))
-    assert err < 1e-9, f"blocksim 과 최대차 {err}"
+    assert err < 1e-9, f"loopsym 과 최대차 {err}"
 
 
 def test_pi_loop_step_timing():

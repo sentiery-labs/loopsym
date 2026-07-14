@@ -7,7 +7,7 @@
 ## ★ 재검증 (2026-07-14) — 현실적 HILS 부하 조건 ★
 
 `benchmarks/p40_realtime.py` (재현: `python benchmarks/p40_realtime.py`).
-조건 전부 동시 적용: 13-상태 6-DoF 쿼드 RK4 를 **blocksim 블록 그래프
+조건 전부 동시 적용: 13-상태 6-DoF 쿼드 RK4 를 **loopsym 블록 그래프
 경유**로 매 스텝 적분 + pymavlink HIL_SENSOR 인코딩/UDP 송신 매 스텝 +
 WebSocket 10Hz 상태 스트리밍(헤드리스 클라이언트 연결 유지) + GC 기본 +
 일반 데스크탑 부하. 각 주파수 5분.

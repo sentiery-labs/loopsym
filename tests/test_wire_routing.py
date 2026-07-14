@@ -17,10 +17,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import Diagram, Gain, Scope, Step, export_json, load_json  # noqa: E402
+from loopsym import Diagram, Gain, Scope, Step, export_json, load_json  # noqa: E402
 
 HERE = os.path.dirname(__file__)
-VIEWER = os.path.join(HERE, "..", "blocksim", "viewer.html")
+VIEWER = os.path.join(HERE, "..", "loopsym", "viewer.html")
 
 node = shutil.which("node")
 

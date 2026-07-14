@@ -1,6 +1,6 @@
-# blocksim 플랫폼 아키텍처 — 드론/로봇 개발 플랫폼 설계 문서
+# loopsym 플랫폼 아키텍처 — 드론/로봇 개발 플랫폼 설계 문서
 
-> 이 문서는 blocksim의 장기 설계 기준(north star)이다.
+> 이 문서는 loopsym의 장기 설계 기준(north star)이다.
 > 모든 블록/팔레트/커리큘럼 작업은 이 문서와 일관성을 유지해야 한다.
 > 상태: 확정 (2026-07-14) | 작성: 충박사 + Claude 설계 세션
 
@@ -81,7 +81,7 @@ Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
 | 주차 | 트랙 | 여는 팔레트 | 학생 경험 |
 |---|---|---|---|
 | 1~6 | 엔진 제작 | (자기 엔진) | 블록/그래프/위상정렬/대수루프/RK4 를 바닥부터 |
-| 7 | ★브리지 | Math, Sources | 내 엔진 ↔ 정식 blocksim 교차 검증 (6자리 일치) |
+| 7 | ★브리지 | Math, Sources | 내 엔진 ↔ 정식 loopsym 교차 검증 (6자리 일치) |
 | 8 | 팔레트 개방 | Plant | 6-DoF 이해, 개루프 불안정 체험 |
 | 9~10 | 팔레트 개방 | Control, Allocation | 샘플링/이산 + PID→rate→attitude→position 폐루프 |
 | 11~12 | 팔레트 개방 | Sensors, Estimation | **ideal→noisy 전환으로 기체가 흔들리는 것을 목격 → 필터로 복구.** 상태추정의 존재 이유를 체험 |

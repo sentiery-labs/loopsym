@@ -14,7 +14,7 @@ Mux 가 만들고 Demux 만 소비한다 (v1 규칙: 연산 블록 투입 금지
   모델이 단순("와이어 = 값 하나"). Simulink 의 Mux 개념과 대응.
 - 단점: 3축 PID 를 만들려면 Demux → 스칼라 3벌 → Mux 로 펼쳐야 한다 (다이어그램이
   커진다 — 교육적으로는 오히려 장점일 수도: 축 3개가 눈에 보인다).
-- 프로토타입: `Mux`/`Demux` 블록 (blocksim/blocks.py), 파이썬·뷰어 양쪽 구현,
+- 프로토타입: `Mux`/`Demux` 블록 (loopsym/blocks.py), 파이썬·뷰어 양쪽 구현,
   Scope 직결 시 친절한 에러("Demux 로 풀어서 연결").
 
 ## 노선 B — 진짜 벡터 신호 (와이어가 ndarray 를 나름)

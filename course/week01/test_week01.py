@@ -1,4 +1,4 @@
-"""1주차 채점기 — 정식 blocksim 블록을 정답 오라클로 사용."""
+"""1주차 채점기 — 정식 loopsym 블록을 정답 오라클로 사용."""
 
 import math
 import os
@@ -6,10 +6,10 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, "..", ".."))     # blocksim (정답 오라클)
+sys.path.insert(0, os.path.join(HERE, "..", ".."))     # loopsym (정답 오라클)
 
 import signals                                          # noqa: E402  (학생 코드)
-from blocksim import Sine, Step                         # noqa: E402
+from loopsym import Sine, Step                         # noqa: E402
 
 TS = [0.0, 0.5, 0.999, 1.0, 1.001, 1.5, 3.7, 10.0]
 

@@ -10,7 +10,7 @@
   python examples/ex6_ros2_turtlesim.py            # 창 표시
   python examples/ex6_ros2_turtlesim.py --headless # CI/원격 (offscreen)
 
-뷰어에서 라이브로: python -m blocksim.server 를 켜고 ex6_diagram.html 을
+뷰어에서 라이브로: python -m loopsym.server 를 켜고 ex6_diagram.html 을
 열어 "실시간" 체크 후 ▶ — 단, ROS2 블록은 rclpy 가 필요하므로 서버
 모드에서만 실행된다 (Pyodide 는 에러 안내).
 """
@@ -23,11 +23,11 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from blocksim import (
+from loopsym import (
     Diagram, PyFunction, Ros2Publish, Ros2Subscribe, Scope,
     render_html, run_realtime,
 )
-from blocksim import ros2 as bs_ros2
+from loopsym import ros2 as bs_ros2
 
 GOAL = (9.0, 9.0)
 DT = 0.02        # 50Hz — P40/P42 에서 검증한 주기
@@ -66,9 +66,12 @@ def main():
         title="ex6 — ROS2 turtlesim go-to-goal (서버 모드 + 실시간 체크)"))
 
     print("turtlesim 기동…" + (" (offscreen)" if headless else ""))
+    # start_new_session: `ros2 run` 래퍼만 terminate 하면 자식 turtlesim_node 가
+    # 고아로 살아남는다 (잔존 노드가 다음 실행의 토픽을 오염 — 실측 사고).
+    # 프로세스 그룹으로 묶어 종료 시 killpg 로 전부 정리한다.
     turtle = subprocess.Popen(["ros2", "run", "turtlesim", "turtlesim_node"],
                               env=env, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL)
+                              stderr=subprocess.DEVNULL, start_new_session=True)
     try:
         # 첫 pose 수신 대기 (defaults 에서 실측 래치로 바뀔 때까지)
         for _ in range(100):
@@ -90,7 +93,11 @@ def main():
         print("판정:", "PASS ✅ (목표 도달)" if ok else f"FAIL ❌ (허용 0.3)")
         return 0 if ok else 1
     finally:
-        turtle.terminate()
+        import signal
+        try:
+            os.killpg(os.getpgid(turtle.pid), signal.SIGTERM)   # 래퍼+자식 전부
+        except ProcessLookupError:
+            pass
         turtle.wait(timeout=5)
         bs_ros2.shutdown()
 

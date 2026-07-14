@@ -28,7 +28,7 @@ WEEKS = {
 
 
 def _run_grader(week_dir):
-    env = dict(os.environ, PYTHONPATH=ROOT)     # blocksim 오라클 임포트용
+    env = dict(os.environ, PYTHONPATH=ROOT)     # loopsym 오라클 임포트용
     return subprocess.run(
         [sys.executable, "-m", "pytest", f"test_{os.path.basename(week_dir)}.py",
          "-q", "-p", "no:cacheprovider"],

@@ -270,7 +270,7 @@
 
 <div id="bsApp">
   <div id="bsBar">
-    <div class="brand"><b>blocksim</b><span class="sub">__TITLE__</span><span class="mode" id="bsMode">Browser (Pyodide)</span></div>
+    <div class="brand"><b>loopsym</b><span class="sub">__TITLE__</span><span class="mode" id="bsMode">Browser (Pyodide)</span></div>
     <span id="bsStatus"></span>
     <label>t_end <input type="text" id="inTend" value="10"></label>
     <label>dt <input type="text" id="inDt" value="0.01"></label>
@@ -303,7 +303,7 @@
 
 <dialog id="dlgCode">
   <div class="dlg-head">
-    <b>blocksim Python 코드</b>
+    <b>loopsym Python 코드</b>
     <span>
       <button id="btnCopy">복사</button>
       <button id="btnClose">닫기</button>
@@ -338,8 +338,8 @@
 <script>
 "use strict";
 /* ================================================================
- * blocksim viewer — 다이어그램 "에디터". 시뮬레이션 엔진이 아니다.
- *  · 시뮬레이션 엔진은 파이썬 blocksim/ 하나뿐 (single source of truth).
+ * loopsym viewer — 다이어그램 "에디터". 시뮬레이션 엔진이 아니다.
+ *  · 시뮬레이션 엔진은 파이썬 loopsym/ 하나뿐 (single source of truth).
  *    과거의 JS 엔진 복제본(수동 동기화)은 2026-07 폐기 — git 히스토리 참조.
  *  · 이 JS 의 역할 4가지:
  *    ① 블록 배치/연결/마스크 파라미터 편집   ② 모델 JSON 직렬화/역직렬화
@@ -1227,9 +1227,9 @@ function status(msg, cls) {
 }
 
 /* ================================================================
- * 시뮬레이션 — Pyodide 위에서 파이썬 blocksim 엔진을 그대로 실행
+ * 시뮬레이션 — Pyodide 위에서 파이썬 loopsym 엔진을 그대로 실행
  *  JS→Python 인터페이스는 함수 하나뿐:
- *    blocksim.webapi.run_simulation(diagram_json, t_end, dt)
+ *    loopsym.webapi.run_simulation(diagram_json, t_end, dt)
  *      -> {"time": [...], "signals": {scope경로: [[ch0...], ...]},
  *          "labels": {scope경로: [...]}, "errors": [...]}
  * ================================================================ */
@@ -1238,7 +1238,7 @@ const PYODIDE_VERSION = "0.26.4";
 // 설치, 인터넷 불필요) → 실패하면 CDN.
 const PYODIDE_URLS = [
   "pyodide/pyodide.js",
-  "../blocksim/pyodide/pyodide.js",
+  "../loopsym/pyodide/pyodide.js",
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.js`,
 ];
 const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py", "ros2.py"];
@@ -1279,10 +1279,10 @@ async function initEngine() {
   const indexURL = new URL(jsUrl, location.href).href.replace(/pyodide\.js.*$/, "");
   const py = await loadPyodide({ indexURL });
   const src = await fetchEngineSources();
-  py.FS.mkdirTree("/app/blocksim");
-  for (const f in src) py.FS.writeFile("/app/blocksim/" + f, src[f]);
+  py.FS.mkdirTree("/app/loopsym");
+  for (const f in src) py.FS.writeFile("/app/loopsym/" + f, src[f]);
   py.runPython('import sys; sys.path.insert(0, "/app")');
-  return py.runPython("from blocksim.webapi import run_simulation; run_simulation");
+  return py.runPython("from loopsym.webapi import run_simulation; run_simulation");
 }
 
 function engine() {
@@ -1295,7 +1295,7 @@ function engine() {
 /* ---------------- 로컬 서버 모드 (HILS/실시간 러너의 기반) ----------------
  * 페이지 로드 때 ws://localhost:8765 접속을 시도한다. 성공하면 서버 모드
  * (시뮬레이션이 로컬 파이썬 프로세스에서 돌고 결과가 스트리밍됨), 실패하면
- * 사용자 개입 없이 Pyodide 모드. 프로토콜은 blocksim/server.py 참조. */
+ * 사용자 개입 없이 Pyodide 모드. 프로토콜은 loopsym/server.py 참조. */
 const SERVER_URL = "ws://localhost:8765/ws";
 let serverWs = null;      // 열린 연결 (null = Pyodide 모드)
 let serverRun = null;     // 진행 중 실행 {accum, lastDraw, resolve, reject}
@@ -1512,7 +1512,7 @@ function genPython() {
     while (used.has(v)) v += "_";
     used.add(v); return v;
   };
-  const lines = ["from blocksim import *", ""];
+  const lines = ["from loopsym import *", ""];
   function emit(m, dvar) {
     lines.push(`${dvar} = Diagram()`);
     const names = new Map();
@@ -1575,7 +1575,7 @@ document.getElementById("btnSave").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(model, null, 1)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "blocksim_model.json";
+  a.download = "loopsym_model.json";
   a.click();
   URL.revokeObjectURL(a.href);
   status("모델 JSON 을 내려받았습니다.", "ok");

@@ -1,7 +1,7 @@
-"""blocksim.server — 로컬 파이썬 서버 실행 모드 (FastAPI + WebSocket).
+"""loopsym.server — 로컬 파이썬 서버 실행 모드 (FastAPI + WebSocket).
 
-    python -m blocksim.server            # ws://localhost:8765
-    python -m blocksim.server --port N
+    python -m loopsym.server            # ws://localhost:8765
+    python -m loopsym.server --port N
 
 뷰어는 페이지 로드 때 이 주소로 접속을 시도해서, 성공하면 "Local Server"
 모드(시뮬레이션이 이 프로세스에서 돌고 결과가 스트리밍됨), 실패하면
@@ -20,7 +20,7 @@ Pyodide 모드로 자동 폴백한다. HILS(실제 Pixhawk)와 실시간 러너(
 
 실행 모드 [CLD-P42]:
   sim      — 최대 속도 배치 실행 (결과가 목적)
-  realtime — 벽시계 1:1 페이싱 (blocksim.realtime 스케줄러; 뷰어 Scope 가
+  realtime — 벽시계 1:1 페이싱 (loopsym.realtime 스케줄러; 뷰어 Scope 가
              라이브로 흐른다 = external mode. HILS/실기체 블록의 기반)
 
 스레딩 구조 (중요 — 실시간 모드의 기반):
@@ -49,7 +49,7 @@ from .webapi import MAX_STEPS, _scope_paths
 CHUNK_WALL_S = 0.1      # 청크 전송 주기 (wall clock) ≈ 10Hz
 QUEUE_SIZE = 64         # 넘치면 오래된 청크부터 버린다
 
-app = FastAPI(title="blocksim local server")
+app = FastAPI(title="loopsym local server")
 
 
 def _put_drop_oldest(q, item):
@@ -192,11 +192,11 @@ async def ws_root(ws: WebSocket):
 
 def main():
     import uvicorn
-    ap = argparse.ArgumentParser(description="blocksim 로컬 서버 (뷰어가 자동 감지)")
+    ap = argparse.ArgumentParser(description="loopsym 로컬 서버 (뷰어가 자동 감지)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
-    print(f"blocksim server — ws://{args.host}:{args.port}/ws (뷰어를 새로고침하면 잡습니다)")
+    print(f"loopsym server — ws://{args.host}:{args.port}/ws (뷰어를 새로고침하면 잡습니다)")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 

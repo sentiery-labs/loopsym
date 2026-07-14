@@ -1,4 +1,4 @@
-"""3주차 채점기 — Sum/Product/PyFunction 을 blocksim 오라클과 대조."""
+"""3주차 채점기 — Sum/Product/PyFunction 을 loopsym 오라클과 대조."""
 
 import os
 import sys
@@ -10,7 +10,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
 import myblocks as mb                                   # noqa: E402
-import blocksim as bs                                   # noqa: E402
+import loopsym as bs                                   # noqa: E402
 
 
 @pytest.mark.parametrize("signs,u", [
