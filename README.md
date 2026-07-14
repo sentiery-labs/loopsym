@@ -78,6 +78,28 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
   실행 경로를 헤드리스로 돌려 네이티브 엔진·회귀 기준값과 대조한다
   (repo 루트에서 `npm install` 필요; CI 에서 항상 실행).
 
+### 로컬 서버 모드 (`python -m blocksim.server`)
+
+같은 뷰어가 로컬 파이썬 서버에 붙어 시뮬레이션을 돌리는 두 번째 모드.
+HILS(실제 Pixhawk 연결)와 실시간 러너는 브라우저 샌드박스 밖이 필요하므로
+이 모드에서만 동작하게 된다.
+
+```bash
+pip install -e ".[server]"        # fastapi + uvicorn
+python -m blocksim.server         # ws://localhost:8765
+```
+
+- 뷰어는 페이지 로드 때 자동 감지: 서버가 있으면 좌상단 배지가
+  **Local Server**, 없으면 **Browser (Pyodide)** (사용자 개입 없는 폴백).
+  서버를 나중에 켰다면 뷰어를 새로고침.
+- 서버 모드에서는 결과가 **스트리밍**되고(진행 중 Scope 가 갱신됨),
+  ▶ 버튼이 **■ 정지**로 바뀌어 긴 실행을 중단할 수 있다 (1초 내 반영).
+- 스레딩 원칙: *physics never waits for the viewer* — 시뮬 루프는 전용
+  스레드, 전송은 non-blocking queue(가득 차면 오래된 청크 폐기).
+  프로토콜/구조는 `blocksim/server.py` docstring 참조.
+- 두 모드는 같은 파이썬 엔진을 부르므로 결과가 동일하다
+  (`tests/test_server.py` 가 ex1~ex4 로 검증).
+
 ## 설계 노트 (Simulink 와의 대응)
 
 - **feedthrough**: 출력이 현재 입력에 즉시 의존하면 True. `Integrator` /

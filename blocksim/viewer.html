@@ -87,6 +87,12 @@
   }
   #bsBar .brand b::before { content: "▣ "; color: var(--accent); }
   #bsBar .brand .sub { color: var(--ink-2); font-size: 12.5px; }
+  #bsBar .brand .mode {
+    font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+    letter-spacing: .06em; color: var(--ink-3);
+    border: 1px solid var(--line); border-radius: 10px; padding: 2px 9px;
+  }
+  #bsBar .brand .mode.srv { color: var(--accent); border-color: var(--accent); font-weight: 600; }
   #bsBar label { color: var(--ink-2); font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
   #bsBar input[type=text] {
     width: 64px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px;
@@ -244,7 +250,7 @@
 
 <div id="bsApp">
   <div id="bsBar">
-    <div class="brand"><b>blocksim</b><span class="sub">__TITLE__</span></div>
+    <div class="brand"><b>blocksim</b><span class="sub">__TITLE__</span><span class="mode" id="bsMode">Browser (Pyodide)</span></div>
     <span id="bsStatus"></span>
     <label>t_end <input type="text" id="inTend" value="10"></label>
     <label>dt <input type="text" id="inDt" value="0.01"></label>
@@ -1054,30 +1060,103 @@ function engine() {
   return enginePromise;
 }
 
+/* ---------------- 로컬 서버 모드 (HILS/실시간 러너의 기반) ----------------
+ * 페이지 로드 때 ws://localhost:8765 접속을 시도한다. 성공하면 서버 모드
+ * (시뮬레이션이 로컬 파이썬 프로세스에서 돌고 결과가 스트리밍됨), 실패하면
+ * 사용자 개입 없이 Pyodide 모드. 프로토콜은 blocksim/server.py 참조. */
+const SERVER_URL = "ws://localhost:8765/ws";
+let serverWs = null;      // 열린 연결 (null = Pyodide 모드)
+let serverRun = null;     // 진행 중 실행 {accum, lastDraw, resolve, reject}
+
+function setMode() {
+  const el = document.getElementById("bsMode");
+  el.textContent = serverWs ? "Local Server" : "Browser (Pyodide)";
+  el.classList.toggle("srv", !!serverWs);
+}
+function tryServer() {
+  let ws;
+  try { ws = new WebSocket(SERVER_URL); } catch { return; }
+  ws.onopen = () => { serverWs = ws; setMode(); };
+  ws.onclose = () => {
+    if (serverWs === ws) {
+      serverWs = null; setMode();
+      if (serverRun) serverRun.reject(new Error("로컬 서버 연결이 끊겼습니다 — Pyodide 모드로 전환됨"));
+    }
+  };
+  ws.onmessage = ev => handleServerMsg(JSON.parse(ev.data));
+}
+const appendAll = (dst, src) => { for (const v of src) dst.push(v); };   // spread 는 대형 청크에서 스택 초과
+function handleServerMsg(m) {
+  if (!serverRun) return;
+  const a = serverRun.accum;
+  if (m.type === "progress") {
+    const c = m.signals_chunk;
+    appendAll(a.time, c.time);
+    a.labels = c.labels;
+    for (const k in c.signals) {
+      if (!a.signals[k]) a.signals[k] = c.signals[k].map(() => []);
+      c.signals[k].forEach((ch, i) => appendAll(a.signals[k][i], ch));
+    }
+    status(`실행 중 — t = ${m.t.toFixed(2)} s …`, "busy");
+    if (performance.now() - serverRun.lastDraw > 200) {   // 스트리밍 그리기 ~5Hz
+      serverRun.lastDraw = performance.now();
+      drawScopes(toScopeCards(a));
+    }
+  } else if (m.type === "done") {
+    serverRun.resolve(m.stats);
+  } else if (m.type === "error") {
+    serverRun.reject(new Error(m.message));
+  }
+}
+function runOnServer(tEnd, dt) {
+  return new Promise((resolve, reject) => {
+    serverRun = { accum: { time: [], signals: {}, labels: {} }, lastDraw: 0, resolve, reject };
+    serverWs.send(JSON.stringify({ cmd: "run", diagram: model, t_end: tEnd, dt }));
+  });
+}
+function stopServer() {
+  if (serverWs && serverRun) serverWs.send(JSON.stringify({ cmd: "stop" }));
+}
+
+const toScopeCards = res => Object.keys(res.signals).map(disp => ({
+  disp, labels: res.labels[disp] || [], t: res.time, data: res.signals[disp],
+}));
+
 let simBusy = false;
 async function runSim() {
   if (simBusy) return;
   const btn = document.getElementById("btnRun");
   try {
-    simBusy = true; btn.disabled = true;
+    simBusy = true;
     fixModel(model);
     const tEnd = parseFloat(document.getElementById("inTend").value);
     const dt = parseFloat(document.getElementById("inDt").value);
     if (!(tEnd > 0) || !(dt > 0)) throw new Error("t_end, dt 는 양수여야 합니다.");
-    if (!enginePromise) status("파이썬 엔진(Pyodide) 로딩 중 — 최초 1회 ~5초 걸립니다…", "busy");
-    const run = await engine();
-    status("시뮬레이션 실행 중…", "busy");
-    await new Promise(r => setTimeout(r, 20));   // 상태줄이 화면에 그려질 틈
-    const res = JSON.parse(run(JSON.stringify(model), tEnd, dt));
-    if (res.errors && res.errors.length) throw new Error(res.errors.join(" / "));
-    drawScopes(Object.keys(res.signals).map(disp => ({
-      disp, labels: res.labels[disp] || [], t: res.time, data: res.signals[disp],
-    })));
-    status(`완료 — ${Math.round(tEnd / dt)} steps, RK4 (파이썬 엔진), dt=${dt}`, "ok");
+
+    if (serverWs) {                       // ---- 서버 모드: 스트리밍 + 정지 가능 ----
+      btn.textContent = "■ 정지";
+      status("로컬 서버에서 실행 중…", "busy");
+      const stats = await runOnServer(tEnd, dt);
+      drawScopes(toScopeCards(serverRun.accum));
+      status(stats.stopped
+        ? `정지됨 — ${stats.steps} steps 진행 (로컬 서버)`
+        : `완료 — ${stats.steps} steps, RK4 (로컬 서버), ${stats.elapsed_s.toFixed(2)}s`, "ok");
+    } else {                              // ---- Pyodide 모드 ----
+      btn.disabled = true;
+      if (!enginePromise) status("파이썬 엔진(Pyodide) 로딩 중 — 최초 1회 ~5초 걸립니다…", "busy");
+      const run = await engine();
+      status("시뮬레이션 실행 중…", "busy");
+      await new Promise(r => setTimeout(r, 20));   // 상태줄이 화면에 그려질 틈
+      const res = JSON.parse(run(JSON.stringify(model), tEnd, dt));
+      if (res.errors && res.errors.length) throw new Error(res.errors.join(" / "));
+      drawScopes(toScopeCards(res));
+      status(`완료 — ${Math.round(tEnd / dt)} steps, RK4 (파이썬 엔진), dt=${dt}`, "ok");
+    }
   } catch (e) {
     status(e.message, "err");
   } finally {
-    simBusy = false; btn.disabled = false;
+    simBusy = false; serverRun = null;
+    btn.disabled = false; btn.textContent = "▶ 실행";
   }
 }
 
@@ -1232,7 +1311,8 @@ function genPython() {
 }
 
 /* ---------------- 툴바 ---------------- */
-document.getElementById("btnRun").addEventListener("click", runSim);
+// 서버 모드에서 실행 중이면 ▶ 버튼이 ■ 정지 역할
+document.getElementById("btnRun").addEventListener("click", () => serverRun ? stopServer() : runSim());
 document.getElementById("btnReset").addEventListener("click", () => {
   model = JSON.parse(initialModel);
   nextId = 0;
@@ -1285,4 +1365,5 @@ new MutationObserver(() => lastScopes && drawScopes(lastScopes))
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => lastScopes && drawScopes(lastScopes));
 
 render();
+tryServer();   // 로컬 서버가 있으면 자동 감지 — 없으면 Pyodide 모드 유지
 </script>

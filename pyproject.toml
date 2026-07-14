@@ -20,7 +20,8 @@ dependencies = []            # 코어는 순수 파이썬 — 의존성 0 (교�
 
 [project.optional-dependencies]
 examples = ["matplotlib"]
-dev = ["pytest", "matplotlib"]
+server = ["fastapi", "uvicorn"]          # 로컬 서버 모드 (python -m blocksim.server)
+dev = ["pytest", "matplotlib", "fastapi", "uvicorn", "websockets"]
 
 [tool.setuptools]
 packages = ["blocksim"]

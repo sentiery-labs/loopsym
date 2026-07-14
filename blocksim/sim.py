@@ -130,6 +130,16 @@ class Simulator:
 
     def run(self, t_end, dt=0.01):
         """0 부터 t_end 까지 고정 스텝 dt 로 시뮬레이션."""
+        for _ in self.iter_run(t_end, dt):
+            pass
+        return self
+
+    def iter_run(self, t_end, dt=0.01):
+        """run() 의 제너레이터 판 — 매 major step 이 끝난 뒤 (step, t) 를 yield.
+
+        스텝 사이에 다른 일을 끼워야 하는 호출자용: 서버 모드의 결과
+        스트리밍/정지 확인, 실시간 러너의 페이싱 등. run() 과 의미론이
+        완전히 같다 (run 자체가 이 제너레이터를 소비한다)."""
         x = self._initial_state()
         self.xd = {b: tuple(b.dinitial()) for b in self.discrete}
         # 이산 블록의 sample_time 은 dt 의 정수배여야 한다 (Simulink 의 rate 규칙)
@@ -166,7 +176,8 @@ class Simulator:
             for b in self.discrete:
                 if step % period[b] == 0:
                     self.xd[b] = tuple(b.update(t, inputs[b], self.xd[b]))
-        return self
+
+            yield step, t
 
 
 def run(diagram, t_end, dt=0.01):
