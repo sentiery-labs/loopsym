@@ -16,9 +16,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/setup-node@v4      # 파이썬↔JS 엔진 동기화 테스트용
+      - uses: actions/setup-node@v4      # Pyodide 스모크 테스트용 (뷰어 실행 경로 검증)
         with:
           node-version: "20"
+      - run: npm install                 # pyodide (tests/pyodide_smoke.mjs)
       - run: pip install -e ".[dev]"
       - run: python -m pytest tests/ -q
       - name: examples smoke test

@@ -142,6 +142,20 @@ def load_json(src):
     return build(src)
 
 
+# 뷰어에 심는 엔진 소스 — 뷰어의 Pyodide 가 이 파일들을 그대로 임포트해서 돌린다.
+# (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
+_ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py"]
+
+
+def _engine_sources():
+    here = os.path.dirname(__file__)
+    out = {}
+    for fname in _ENGINE_FILES:
+        with open(os.path.join(here, fname), encoding="utf-8") as f:
+            out[fname] = f.read()
+    return out
+
+
 def render_html(bd, path, title="blocksim viewer"):
     """모델을 심은 단독 HTML 파일을 만든다. 반환: 절대 경로."""
     template = os.path.join(os.path.dirname(__file__), "viewer.html")
@@ -149,6 +163,9 @@ def render_html(bd, path, title="blocksim viewer"):
         html = f.read()
     model = json.dumps(export_json(bd), ensure_ascii=False)
     html = html.replace("/*__MODEL_JSON__*/null", model)
+    # 엔진 소스 주입. "</" 는 "<\/" 로 — 소스 안의 문자열이 </script> 로 오인되는 것 방지
+    sources = json.dumps(_engine_sources(), ensure_ascii=False).replace("</", "<\\/")
+    html = html.replace("/*__BLOCKSIM_SRC__*/null", sources)
     html = html.replace("__TITLE__", title)
     html = (
         "<!doctype html>\n<html lang=\"ko\">\n<head>\n"

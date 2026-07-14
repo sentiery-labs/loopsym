@@ -10,3 +10,9 @@ venv/
 # 예제 실행 산출물 (재생성 가능)
 examples/*_result.png
 examples/*_diagram.html
+
+# Pyodide (tools/vendor_pyodide.py 로 설치 — 커밋 금지)
+blocksim/pyodide/
+
+# node (Pyodide 스모크 테스트용)
+node_modules/

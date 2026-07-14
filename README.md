@@ -16,11 +16,11 @@ Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬
 | `examples/ex2_pendulum_pyfunction.py` | 비선형 진자 + PD (PyFunction) | 왜 적분항이 필요한가 |
 | `examples/ex3_subsystem.py` | 마스크 PI 서브시스템 (`Gain(k="$Kp")`) | 계층화, flatten, 마스크 |
 | `examples/ex4_discrete_pi.py` | 연속 PI vs 이산 PI (Ts 영향) | 샘플링, PX4 로 가는 다리 |
-| `tests/` | pytest 회귀 + **파이썬↔JS 엔진 동기화** 테스트 | — |
+| `tests/` | pytest 회귀 + **Pyodide 스모크**(뷰어 실행 경로 검증) | — |
 | `docs/` | 15주 커리큘럼 설계, P14/P40 스파이크 결과 | — |
 | `spikes/`, `hardware/` | 실시간 루프 지터 측정, Bebop 2 스파이크(+안전 체크리스트) | — |
 
-개발: `pip install -e ".[dev]"` 후 `python -m pytest tests/ -q` (node 있으면 JS 동기화 테스트 포함)
+개발: `pip install -e ".[dev]"` + `npm install` 후 `python -m pytest tests/ -q` (node+pyodide 있으면 뷰어 스모크 포함)
 
 ## 빠른 시작
 
@@ -54,10 +54,29 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
 - 블록 드래그, 출력→입력 포트 드래그로 와이어 연결/재연결, Delete 로 삭제
 - **Shift+클릭 다중 선택 → "서브시스템으로 묶기"** (경계 Inport/Outport 자동 생성),
   더블클릭으로 내부 진입(브레드크럼/Esc 로 상위), "풀기"로 해체
-- 우측 인스펙터에서 파라미터 수정 후 ▶ 실행 — 브라우저 안 JS 엔진이
-  파이썬 엔진과 **동일한 의미론**(flatten, 2단계 평가, 위상 정렬, RK4)으로 재시뮬레이션
+- 우측 인스펙터에서 파라미터 수정 후 ▶ 실행 — **Pyodide 가 파이썬 blocksim
+  엔진을 브라우저 안에서 그대로 실행** (아래 아키텍처 참조)
 - "Python 코드" 버튼: 현재 다이어그램을 (서브시스템 포함) blocksim 스크립트로 역생성
 - `PyFunction` 은 식 문자열(`"6.0*(u0-u1) - 2.0*u2"`)로 쓰면 뷰어에서도 실행 가능
+
+### 뷰어 아키텍처 — 시뮬레이션 엔진은 파이썬 하나뿐 (2026-07 변경)
+
+초기 뷰어는 파이썬 엔진을 JS 로 복제해 갖고 있었다(수동 동기화 +
+`test_viewer_sync.py` 로 검증). 블록이 늘 때마다 두 벌을 고쳐야 하고
+어긋나면 "뷰어와 파이썬 결과가 다른" 최악의 교육 사고가 나므로, JS 엔진을
+**폐기**하고 Pyodide 로 전환했다 (git 히스토리에 구현이 남아 있다 —
+"파이썬 엔진을 JS 로 포팅해 보기"는 심화 과제로 재사용 가능).
+
+- 뷰어 JS 의 역할: ① 블록 편집 ② 모델 JSON 직렬화 ③ Pyodide 로드 +
+  `blocksim.webapi.run_simulation(diagram_json, t_end, dt)` 호출 ④ Scope 렌더링
+- `render_html()` 이 만드는 HTML 에는 엔진 소스(.py)가 심어져 있어 단독으로
+  동작한다. 원본 `viewer.html` 을 직접 열 때는 옆의 .py 를 fetch 하므로
+  repo 를 HTTP 로 서빙해야 한다 (`python -m http.server`).
+- 최초 실행 시 Pyodide 로딩 ~5초 (이후 재실행은 즉시). **오프라인 교실**은
+  `python tools/vendor_pyodide.py` 로 로컬 사본을 설치하면 CDN 없이 동작.
+- 검증: `tests/test_pyodide_smoke.py` 가 node + pyodide(npm) 로 뷰어와 같은
+  실행 경로를 헤드리스로 돌려 네이티브 엔진·회귀 기준값과 대조한다
+  (repo 루트에서 `npm install` 필요; CI 에서 항상 실행).
 
 ## 설계 노트 (Simulink 와의 대응)
 

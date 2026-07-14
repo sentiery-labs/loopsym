@@ -107,6 +107,12 @@
   #bsStatus { font-size: 12.5px; color: var(--ink-2); min-height: 1em; }
   #bsStatus.err { color: var(--danger); font-weight: 600; }
   #bsStatus.ok { color: var(--accent); }
+  #bsStatus.busy::before {
+    content: ""; display: inline-block; width: 10px; height: 10px;
+    border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%;
+    margin-right: 7px; vertical-align: -1px; animation: bs-spin .8s linear infinite;
+  }
+  @keyframes bs-spin { to { transform: rotate(360deg); } }
 
   /* ---------- main 3-column ---------- */
   #bsMain { flex: 1; display: grid; grid-template-columns: 172px 1fr 248px; min-height: 0; }
@@ -281,21 +287,20 @@
 <script>
 "use strict";
 /* ================================================================
- * blocksim viewer — 파이썬 blocksim 엔진과 같은 의미론의 JS 구현.
- *  · 서브시스템: 실행 전 flatten (파이썬 sim.flatten 과 대응)
- *  · 2단계 평가: 상태 블록 출력 먼저 → feedthrough 블록 위상 순서
- *  · 대수 루프 검출, RK4 고정 스텝
+ * blocksim viewer — 다이어그램 "에디터". 시뮬레이션 엔진이 아니다.
+ *  · 시뮬레이션 엔진은 파이썬 blocksim/ 하나뿐 (single source of truth).
+ *    과거의 JS 엔진 복제본(수동 동기화)은 2026-07 폐기 — git 히스토리 참조.
+ *  · 이 JS 의 역할 4가지:
+ *    ① 블록 배치/연결/마스크 파라미터 편집   ② 모델 JSON 직렬화/역직렬화
+ *    ③ Pyodide 로드 + 파이썬 엔진 호출        ④ 결과 시계열의 Scope 렌더링
  * ================================================================ */
 
 const EMBEDDED = /*__MODEL_JSON__*/null;
+// render_html() 이 파이썬 엔진 소스를 심는 자리 ({파일명: 소스}). 원본
+// viewer.html 을 직접 열면 null — 이때는 옆의 .py 파일을 fetch 한다 (HTTP 서빙 필요).
+const BLOCKSIM_SRC = /*__BLOCKSIM_SRC__*/null;
 
-/* ---------------- 블록 라이브러리 (파이썬 blocks.py 와 대응) ---------------- */
-const M = Math;
-function compileExpr(expr, nin) {
-  const us = Array.from({length: nin}, (_, i) => `const u${i}=u[${i}];`).join("");
-  const env = "const {sin,cos,tan,asin,acos,atan,atan2,sinh,cosh,tanh,sqrt,exp,log,pow,abs,min,max,sign,floor,ceil,PI,E}=Math;";
-  return new Function("t", "u", env + us + `return (${expr});`);
-}
+/* ---------------- 블록 메타데이터 (팔레트/포트 수/기본값 — blocks.py 와 대응) ---------------- */
 const countIO = (b, type) => b.inner ? b.inner.blocks.filter(x => x.type === type).length : 0;
 const LIB = {
   Constant: { cat: "source", tag: "const", nIn: () => 0, nOut: () => 1,
@@ -339,9 +344,6 @@ const LIB = {
     defaults: { n_in: 1, labels: ["in0"] }, summary: p => `${p.n_in} ch` },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)" };
-const STATEFUL = { Integrator: true, TransferFunction: true };                 // 연속 상태 (RK4)
-const DISCRETE = { UnitDelay: true, DiscreteIntegrator: true, DiscreteTransferFunction: true };
-const NOFT = { ...STATEFUL, ...DISCRETE };                                     // feedthrough=False
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();
@@ -980,271 +982,102 @@ function renderInspector() {
   mkBtn("블록 삭제", "danger", () => deleteBlocks([b.id]));
 }
 
-/* ---------------- flatten (sim.py flatten 대응) ---------------- */
-function flattenModel(root) {
-  const entries = [];                // {key, b, disp, mask: [바깥→안쪽 마스크 dict 체인]}
-  const parentOf = new Map();        // inner model -> {sub, parentModel, parentPrefix}
-  (function collect(m, prefix, dp, maskChain) {
-    for (const b of m.blocks) {
-      const key = prefix + b.id;
-      if (b.type === "Subsystem") {
-        const ins = b.inner.blocks.filter(x => x.type === "Inport").map(x => x.params.index).sort((a, c) => a - c);
-        const outs = b.inner.blocks.filter(x => x.type === "Outport").map(x => x.params.index).sort((a, c) => a - c);
-        const ok = a => a.every((v, i) => v === i);
-        if (!ok(ins) || !ok(outs))
-          throw new Error(`'${dp + b.name}': Inport/Outport index 는 0 부터 빠짐없이 이어져야 합니다.`);
-        parentOf.set(b.inner, { sub: b, parentModel: m, parentPrefix: prefix });
-        collect(b.inner, key + "/", dp + b.name + "/", [...maskChain, b.params || {}]);
-      } else if (b.type !== "Inport" && b.type !== "Outport") {
-        entries.push({ key, b, disp: dp + b.name, mask: maskChain });
-      }
-    }
-  })(root, "", "", []);
-  const find = (m, id) => m.blocks.find(b => b.id === id);
-  function resolve(m, prefix, srcId, srcPort) {
-    const b = find(m, srcId);
-    if (b.type === "Subsystem") {
-      const op = b.inner.blocks.find(x => x.type === "Outport" && x.params.index === srcPort);
-      const w = op && b.inner.wires.find(w => w.dst[0] === op.id);
-      if (!w) throw new Error(`'${b.name}' 내부의 Outport y${srcPort} 가 연결되지 않았습니다.`);
-      return resolve(b.inner, prefix + b.id + "/", w.src[0], w.src[1]);
-    }
-    if (b.type === "Inport") {
-      const p = parentOf.get(m);
-      if (!p) throw new Error(`최상위의 '${b.name}'(Inport) 는 소스가 없습니다.`);
-      const w = p.parentModel.wires.find(w => w.dst[0] === p.sub.id && w.dst[1] === b.params.index);
-      if (!w) throw new Error(`'${p.sub.name}' 의 입력 포트 u${b.params.index} 가 연결되지 않았습니다.`);
-      return resolve(p.parentModel, p.parentPrefix, w.src[0], w.src[1]);
-    }
-    return [prefix + srcId, srcPort];
-  }
-  const wires = new Map();           // "dstKey:port" -> [srcKey, srcPort]
-  (function rewire(m, prefix) {
-    for (const w of m.wires) {
-      const db = find(m, w.dst[0]);
-      if (!db || db.type === "Subsystem" || db.type === "Outport") continue;
-      wires.set(prefix + w.dst[0] + ":" + w.dst[1], resolve(m, prefix, w.src[0], w.src[1]));
-    }
-    for (const b of m.blocks) if (b.type === "Subsystem") rewire(b.inner, prefix + b.id + "/");
-  })(root, "");
-  return { entries, wires };
-}
-
-/* ---------------- 시뮬레이션 엔진 (sim.py 대응) ---------------- */
+/* ---------------- 상태줄 ---------------- */
 function status(msg, cls) {
   const s = document.getElementById("bsStatus");
   s.textContent = msg; s.className = cls || "";
 }
-function compileFlat(flat) {
-  for (const e of flat.entries)
-    for (let i = 0; i < nInOf(e.b); i++)
-      if (!flat.wires.has(e.key + ":" + i))
-        throw new Error(`'${e.disp}' 의 입력 포트 u${i} 가 연결되지 않았습니다.`);
-  const ft = e => !NOFT[e.b.type];
-  const byKey = new Map(flat.entries.map(e => [e.key, e]));
-  const deps = new Map(flat.entries.map(e => [e.key, new Set()]));
-  for (const [dk, src] of flat.wires) {
-    const e = byKey.get(dk.split(":")[0]);
-    if (e && ft(e)) deps.get(e.key).add(src[0]);
-  }
-  const order = [], done = new Set();
-  let remaining = [...flat.entries];
-  while (remaining.length) {
-    const ready = remaining.filter(e => [...deps.get(e.key)].every(k => done.has(k)));
-    if (!ready.length)
-      throw new Error("대수 루프: " + remaining.map(e => e.disp).join(" → ") + " (적분기 없이 닫힌 고리)");
-    for (const e of ready) { order.push(e); done.add(e.key); }
-    remaining = remaining.filter(e => !done.has(e.key));
-  }
-  return order;
+
+/* ================================================================
+ * 시뮬레이션 — Pyodide 위에서 파이썬 blocksim 엔진을 그대로 실행
+ *  JS→Python 인터페이스는 함수 하나뿐:
+ *    blocksim.webapi.run_simulation(diagram_json, t_end, dt)
+ *      -> {"time": [...], "signals": {scope경로: [[ch0...], ...]},
+ *          "labels": {scope경로: [...]}, "errors": [...]}
+ * ================================================================ */
+const PYODIDE_VERSION = "0.26.4";
+// 로드 순서: 로컬 vendored 사본 먼저 (오프라인 교실 — tools/vendor_pyodide.py 로
+// 설치, 인터넷 불필요) → 실패하면 CDN.
+const PYODIDE_URLS = [
+  "pyodide/pyodide.js",
+  "../blocksim/pyodide/pyodide.js",
+  `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.js`,
+];
+const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py"];
+let enginePromise = null;   // Promise<run_simulation> — 최초 1회만 로드하고 재사용
+
+function loadScriptTag(src) {
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => ok(src);
+    s.onerror = () => { s.remove(); fail(new Error(src)); };
+    document.head.appendChild(s);
+  });
 }
-function resolveMask(v, mask, disp, pname) {
-  // "$이름" 문자열 파라미터를 마스크 체인(안쪽 우선)에서 찾는다 — 파이썬 _apply_mask 대응
-  if (typeof v !== "string" || v[0] !== "$") return v;
-  const name = v.slice(1);
-  for (let i = mask.length - 1; i >= 0; i--)
-    if (name in mask[i]) return resolveMask(mask[i][name], mask.slice(0, i), disp, pname);
-  throw new Error(`'${disp}' 의 ${pname}=${v}: 마스크 파라미터 '${name}' 를 찾을 수 없습니다.`);
-}
-function makeRuntime(entries) {
-  const rt = new Map();
-  for (const { key, b, disp, mask } of entries) {
-    // 마스크 해석된 파라미터 사본 (숫자 파라미터의 "$이름" 참조 지원)
-    const p = {};
-    for (const k in b.params) {
-      const v = resolveMask(b.params[k], mask || [], disp, k);
-      // 치환 결과가 숫자 문자열이면 숫자로 (마스크 값을 "3" 처럼 입력한 경우)
-      p[k] = (b.params[k] !== v && typeof v === "string" && v !== "" && !isNaN(Number(v)))
-        ? Number(v) : v;
-    }
-    let r;
-    switch (b.type) {
-      case "Constant": r = { out: () => [p.value] }; break;
-      case "Step": r = { out: (t) => [t >= p.t_on ? p.height : 0] }; break;
-      case "Sine": r = { out: (t) => [p.amp * M.sin(2 * M.PI * p.freq_hz * t + p.phase)] }; break;
-      case "Gain": r = { out: (t, u) => [p.k * u[0]] }; break;
-      case "Sum": {
-        const sg = [...String(p.signs)].map(c => c === "-" ? -1 : 1);
-        r = { out: (t, u) => [u.reduce((a, v, i) => a + sg[i] * v, 0)] }; break;
-      }
-      case "Product": {
-        const ops = [...String(p.ops)];
-        r = { out: (t, u) => [u.reduce((a, v, i) => ops[i] === "/" ? a / v : a * v, 1)] }; break;
-      }
-      case "Saturation": r = { out: (t, u) => [M.min(M.max(u[0], p.lo), p.hi)] }; break;
-      case "PyFunction": {
-        if (p.expr === null) throw new Error(`'${disp}' 은 파이썬 callable 이라 뷰어에서 실행할 수 없습니다 (expr 문자열로 바꾸면 가능).`);
-        let f;
-        try { f = compileExpr(p.expr, nInOf(b)); }
-        catch (e) { throw new Error(`'${disp}' 식 오류: ${e.message}`); }
-        r = { out: (t, u) => { const y = f(t, u); return Array.isArray(y) ? y : [y]; } }; break;
-      }
-      case "Integrator":
-        r = { ns: 1, init: () => [p.x0], out: (t, u, x) => [x[0]], deriv: (t, u, x) => [u[0]] }; break;
-      case "TransferFunction": {
-        const den = p.den.map(Number), num = p.num.map(Number);
-        if (num.length >= den.length) throw new Error(`'${disp}': strictly proper 만 지원 (len(num) < len(den))`);
-        const d0 = den[0];
-        const a = den.slice(1).map(c => c / d0).reverse();
-        const nrm = num.map(c => c / d0);
-        const ns = den.length - 1;
-        const c = [...nrm].reverse().concat(Array(ns - nrm.length).fill(0));
-        r = { ns, init: () => Array(ns).fill(0),
-          out: (t, u, x) => [c.reduce((s, ci, i) => s + ci * x[i], 0)],
-          deriv: (t, u, x) => {
-            const dx = Array.prototype.slice.call(x, 1);
-            dx.push(u[0] - a.reduce((s, ai, i) => s + ai * x[i], 0));
-            return dx;
-          } }; break;
-      }
-      case "UnitDelay":
-        r = { nds: 1, st: p.st, dinit: () => [p.x0],
-              out: (t, u, x) => [x[0]], update: (t, u, xd) => [u[0]] }; break;
-      case "DiscreteIntegrator":
-        r = { nds: 1, st: p.st, dinit: () => [p.x0],
-              out: (t, u, x) => [x[0]], update: (t, u, xd) => [xd[0] + p.st * u[0]] }; break;
-      case "DiscreteTransferFunction": {
-        const den = p.den.map(Number), num = p.num.map(Number);
-        if (num.length >= den.length) throw new Error(`'${disp}': strictly proper 만 지원 (len(num) < len(den))`);
-        const d0 = den[0];
-        const a = den.slice(1).map(c => c / d0).reverse();
-        const nrm = num.map(c => c / d0);
-        const nds = den.length - 1;
-        const c = [...nrm].reverse().concat(Array(nds - nrm.length).fill(0));
-        r = { nds, st: p.st, dinit: () => Array(nds).fill(0),
-          out: (t, u, x) => [c.reduce((s, ci, i) => s + ci * x[i], 0)],
-          update: (t, u, xd) => {
-            const nxt = Array.prototype.slice.call(xd, 1);
-            nxt.push(u[0] - a.reduce((s, ai, i) => s + ai * xd[i], 0));
-            return nxt;
-          } }; break;
-      }
-      case "Mux": r = { out: (t, u) => [u.slice()] }; break;
-      case "Demux": {
-        const n = p.n_out | 0;
-        r = { out: (t, u) => {
-          if (!Array.isArray(u[0]) || u[0].length !== n)
-            throw new Error(`'${disp}': 입력이 길이 ${n} 벡터 신호가 아님 (Mux 출력을 연결)`);
-          return u[0];
-        } }; break;
-      }
-      case "Scope": r = { out: () => [] }; break;
-    }
-    r.ns = r.ns || 0;
-    r.nds = r.nds || 0;
-    r.init = r.init || (() => []);
-    r.dinit = r.dinit || (() => []);
-    r.deriv = r.deriv || (() => []);
-    rt.set(key, r);
+
+async function fetchEngineSources() {
+  if (BLOCKSIM_SRC) return BLOCKSIM_SRC;   // render_html() 배포본: 소스가 심어져 있음
+  // 원본 viewer.html 을 직접 연 개발 모드: 옆의 .py 파일을 fetch (HTTP 서빙 필요)
+  const out = {};
+  for (const f of ENGINE_FILES) {
+    const r = await fetch(f).catch(() => null);
+    if (!r || !r.ok)
+      throw new Error(`엔진 소스 '${f}' 로드 실패 — 원본 viewer.html 은 repo 를 HTTP 로 서빙해서 여세요 (예: python -m http.server). render_html() 로 만든 HTML 은 어디서나 열립니다.`);
+    out[f] = await r.text();
   }
-  return rt;
+  return out;
 }
-function runSim() {
+
+async function initEngine() {
+  let jsUrl = null;
+  const tried = [];
+  for (const u of PYODIDE_URLS) {
+    try { jsUrl = await loadScriptTag(u); break; } catch { tried.push(u); }
+  }
+  if (!jsUrl)
+    throw new Error("Pyodide 로드 실패 (시도: " + tried.join(" → ") +
+      "). 오프라인 환경이면 tools/vendor_pyodide.py 로 로컬 사본을 설치하세요.");
+  const indexURL = new URL(jsUrl, location.href).href.replace(/pyodide\.js.*$/, "");
+  const py = await loadPyodide({ indexURL });
+  const src = await fetchEngineSources();
+  py.FS.mkdirTree("/app/blocksim");
+  for (const f in src) py.FS.writeFile("/app/blocksim/" + f, src[f]);
+  py.runPython('import sys; sys.path.insert(0, "/app")');
+  return py.runPython("from blocksim.webapi import run_simulation; run_simulation");
+}
+
+function engine() {
+  // 실패한 로드는 기억하지 않는다 — 네트워크 복구 후 다시 누르면 재시도
+  if (!enginePromise)
+    enginePromise = initEngine().catch(e => { enginePromise = null; throw e; });
+  return enginePromise;
+}
+
+let simBusy = false;
+async function runSim() {
+  if (simBusy) return;
+  const btn = document.getElementById("btnRun");
   try {
+    simBusy = true; btn.disabled = true;
     fixModel(model);
     const tEnd = parseFloat(document.getElementById("inTend").value);
     const dt = parseFloat(document.getElementById("inDt").value);
     if (!(tEnd > 0) || !(dt > 0)) throw new Error("t_end, dt 는 양수여야 합니다.");
-    const n = Math.round(tEnd / dt);
-    if (n > 2e6) throw new Error("스텝 수가 너무 큽니다 (t_end/dt ≤ 2,000,000).");
-    const flat = flattenModel(model);
-    const order = compileFlat(flat);
-    const rt = makeRuntime(flat.entries);
-
-    const offsets = new Map(); let nx = 0;
-    for (const e of flat.entries) { offsets.set(e.key, nx); nx += rt.get(e.key).ns; }
-    let x = new Float64Array(nx);
-    for (const e of flat.entries) rt.get(e.key).init().forEach((v, i) => { x[offsets.get(e.key) + i] = v; });
-    const bState = (e, xv) => xv.subarray(offsets.get(e.key), offsets.get(e.key) + rt.get(e.key).ns);
-
-    // 이산 상태 + 샘플 주기 검증 (sample_time 은 dt 의 정수배)
-    const xd = new Map(), period = new Map();
-    const discEntries = flat.entries.filter(e => DISCRETE[e.b.type]);
-    for (const e of discEntries) {
-      const r = rt.get(e.key);
-      const m = r.st / dt;
-      if (!(r.st > 0) || Math.abs(m - Math.round(m)) > 1e-6)
-        throw new Error(`'${e.disp}': sample_time(${r.st})은 dt(${dt})의 양의 정수배여야 함`);
-      period.set(e.key, Math.round(m));
-      xd.set(e.key, r.dinit());
-    }
-
-    function evalOutputs(t, xv) {
-      const sig = new Map();
-      for (const e of flat.entries) if (NOFT[e.b.type]) {
-        const xs = DISCRETE[e.b.type] ? xd.get(e.key) : bState(e, xv);
-        rt.get(e.key).out(t, null, xs).forEach((v, i) => sig.set(e.key + ":" + i, v));
-      }
-      for (const e of order) if (!NOFT[e.b.type]) {
-        const u = [];
-        for (let i = 0; i < nInOf(e.b); i++) { const s = flat.wires.get(e.key + ":" + i); u.push(sig.get(s[0] + ":" + s[1])); }
-        rt.get(e.key).out(t, u, null).forEach((v, i) => sig.set(e.key + ":" + i, v));
-      }
-      const inputs = new Map();
-      for (const e of flat.entries) {
-        const u = [];
-        for (let i = 0; i < nInOf(e.b); i++) { const s = flat.wires.get(e.key + ":" + i); u.push(sig.get(s[0] + ":" + s[1])); }
-        inputs.set(e.key, u);
-      }
-      return inputs;
-    }
-    function deriv(t, xv) {
-      const inputs = evalOutputs(t, xv);
-      const dx = new Float64Array(nx);
-      for (const e of flat.entries) if (rt.get(e.key).ns)
-        rt.get(e.key).deriv(t, inputs.get(e.key), bState(e, xv)).forEach((v, i) => { dx[offsets.get(e.key) + i] = v; });
-      return dx;
-    }
-    const scopes = flat.entries.filter(e => e.b.type === "Scope")
-      .map(e => ({ b: e.b, key: e.key, disp: e.disp, t: [], data: Array.from({ length: nInOf(e.b) }, () => []) }));
-
-    const tmp = new Float64Array(nx);
-    const axpy = (xv, k, h) => { for (let i = 0; i < nx; i++) tmp[i] = xv[i] + h * k[i]; return tmp; };
-    for (let step = 0; step <= n; step++) {
-      const t = step * dt;      // 누적 덧셈 대신 곱셈 (파이썬 sim.py 와 동일)
-      const inputs = evalOutputs(t, x);
-      for (const s of scopes) {
-        s.t.push(t);
-        inputs.get(s.key).forEach((v, i) => {
-          if (Array.isArray(v)) throw new Error(`'${s.disp}': 벡터 신호는 Demux 로 풀어서 연결하세요`);
-          s.data[i].push(v);
-        });
-      }
-      const k1 = deriv(t, x);
-      const k2 = deriv(t + dt / 2, axpy(x, k1, dt / 2)).slice();
-      const k3 = deriv(t + dt / 2, axpy(x, k2, dt / 2)).slice();
-      const k4 = deriv(t + dt, axpy(x, k3, dt)).slice();
-      for (let i = 0; i < nx; i++) x[i] += dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
-      // 이산 update 는 RK4 다음 — 구간 [t, t+dt) 는 xd(k) 를 봐야 함 (sim.py 와 동일)
-      for (const e of discEntries)
-        if (step % period.get(e.key) === 0)
-          xd.set(e.key, rt.get(e.key).update(t, inputs.get(e.key), xd.get(e.key)));
-      if (!Number.isFinite(x[0] ?? 0)) { status(`t=${(t + dt).toFixed(3)} 에서 발산 (dt 를 줄여보세요)`, "err"); break; }
-    }
-    drawScopes(scopes);
-    status(`완료 — ${n} steps, RK4, dt=${dt}`, "ok");
+    if (!enginePromise) status("파이썬 엔진(Pyodide) 로딩 중 — 최초 1회 ~5초 걸립니다…", "busy");
+    const run = await engine();
+    status("시뮬레이션 실행 중…", "busy");
+    await new Promise(r => setTimeout(r, 20));   // 상태줄이 화면에 그려질 틈
+    const res = JSON.parse(run(JSON.stringify(model), tEnd, dt));
+    if (res.errors && res.errors.length) throw new Error(res.errors.join(" / "));
+    drawScopes(Object.keys(res.signals).map(disp => ({
+      disp, labels: res.labels[disp] || [], t: res.time, data: res.signals[disp],
+    })));
+    status(`완료 — ${Math.round(tEnd / dt)} steps, RK4 (파이썬 엔진), dt=${dt}`, "ok");
   } catch (e) {
     status(e.message, "err");
+  } finally {
+    simBusy = false; btn.disabled = false;
   }
 }
 
@@ -1259,12 +1092,12 @@ function drawScopes(scopes) {
   const seriesColors = [css("--s1"), css("--s2"), css("--s3"), css("--s4")];
   for (const s of scopes) {
     const card = document.createElement("div"); card.className = "scope-card";
-    const labels = s.b.params.labels;
+    const labels = s.labels;
     const legend = s.data.length > 1
       ? `<div class="legend">${s.data.map((_, i) =>
           `<span><span class="chip" style="background:${seriesColors[i % 4]}"></span>${labels[i] ?? "in" + i}</span>`).join("")}</div>`
       : "";
-    card.innerHTML = `<div class="scope-head"><b>${s.disp || s.b.name}</b>${legend}</div>
+    card.innerHTML = `<div class="scope-head"><b>${s.disp}</b>${legend}</div>
       <div class="scope-plot"><canvas height="190"></canvas><div class="tip"></div></div>`;
     box.appendChild(card);
     plotScope(card.querySelector("canvas"), card.querySelector(".tip"), s, seriesColors, labels);

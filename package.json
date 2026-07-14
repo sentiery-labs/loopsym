@@ -1,0 +1,8 @@
+{
+  "name": "blocksim-edu-dev",
+  "private": true,
+  "description": "개발용 — Pyodide 스모크 테스트(tests/pyodide_smoke.mjs)가 쓰는 node 의존성",
+  "devDependencies": {
+    "pyodide": "0.26.4"
+  }
+}
