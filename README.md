@@ -18,7 +18,8 @@ Simulink의 핵심 원리(블록·와이어·실행 순서·solver)를 파이썬
 | `examples/ex4_discrete_pi.py` | 연속 PI vs 이산 PI (Ts 영향) | 샘플링, PX4 로 가는 다리 |
 | `tests/` | pytest 회귀 + **Pyodide 스모크**(뷰어 실행 경로 검증) | — |
 | `docs/` | 15주 커리큘럼 설계, P14/P40 스파이크 결과 | — |
-| `spikes/`, `hardware/` | 실시간 루프 지터 측정, Bebop 2 스파이크(+안전 체크리스트) | — |
+| `benchmarks/` | **실시간 지터 재검증** (`p40_realtime.py --hz --duration`) + 결과 리포트 | — |
+| `spikes/`, `hardware/` | 최초 실시간 스파이크(폐기됨 — benchmarks 가 유효), Bebop 2 스파이크(+안전 체크리스트) | — |
 
 개발: `pip install -e ".[dev]"` + `npm install` 후 `python -m pytest tests/ -q` (node+pyodide 있으면 뷰어 스모크 포함)
 
@@ -99,6 +100,15 @@ python -m blocksim.server         # ws://localhost:8765
   프로토콜/구조는 `blocksim/server.py` docstring 참조.
 - 두 모드는 같은 파이썬 엔진을 부르므로 결과가 동일하다
   (`tests/test_server.py` 가 ex1~ex4 로 검증).
+
+## 실시간 성능 (실측, 2026-07-14)
+
+**250Hz 에서, 6-DoF 쿼드 물리(블록 그래프 경유) + MAVLink HIL_SENSOR
+인코딩/송신 + WebSocket 10Hz 뷰어 스트리밍을 동시에 건 조건에서 p99 스텝
+간격 4.002ms** (주기 4ms, deadline miss 0.003%, 연속 miss ≤1; 일반 리눅스
+데스크탑, GC 켠 상태, 5분 측정). 500Hz 에서도 p99 2.000ms.
+→ 파이썬 벽시계 루프로 HILS 급 상위 제어 타당. 재현:
+`python benchmarks/p40_realtime.py` (조건·수치: `benchmarks/results/20260714_p40.md`).
 
 ## 설계 노트 (Simulink 와의 대응)
 
