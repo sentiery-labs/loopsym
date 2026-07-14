@@ -245,6 +245,24 @@
     font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.55;
   }
   .empty-note { color: var(--ink-3); font-size: 12.5px; padding: 6px 0; }
+
+  /* ---------- PyFunction 코드 편집기 ---------- */
+  .fn-body { padding: 12px 16px 16px; }
+  .fn-body textarea {
+    width: 100%; min-width: 560px; resize: vertical;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--canvas); color: var(--ink);
+    font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px; line-height: 1.55;
+    tab-size: 4;
+  }
+  .fn-body .hint { font-size: 12px; color: var(--ink-3); margin: 8px 0 10px; line-height: 1.6; }
+  .fn-io { display: flex; gap: 18px; }
+  .fn-io label { color: var(--ink-2); font-size: 12.5px; display: flex; gap: 6px; align-items: center; }
+  .fn-io input {
+    width: 56px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px;
+    background: var(--canvas); color: var(--ink); text-align: right;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px;
+  }
   @media (prefers-reduced-motion: no-preference) {
     button { transition: border-color .12s, color .12s; }
   }
@@ -292,6 +310,29 @@
     </span>
   </div>
   <pre id="codeOut" tabindex="0"></pre>
+</dialog>
+
+<dialog id="dlgFn">
+  <div class="dlg-head">
+    <b id="fnTitle">PyFunction</b>
+    <span>
+      <button class="primary" id="btnFnSave">저장</button>
+      <button id="btnFnCancel">취소</button>
+    </span>
+  </div>
+  <div class="fn-body">
+    <textarea id="fnExpr" rows="10" spellcheck="false" placeholder="예) 한 줄 식:  3.0*(u0-u1) - 2.0*u2&#10;예) 여러 줄:   e = u0 - u1&#10;              y0 = 3*e&#10;              y1 = 2*e"></textarea>
+    <div class="hint">
+      쓸 수 있는 이름: <span class="mono">t</span>, <span class="mono">u0..u{n_in-1}</span>,
+      math 함수(<span class="mono">sin cos tan atan2 sqrt exp pi</span> …), <span class="mono">abs/min/max</span>.<br>
+      한 줄이면 <b>식</b>으로, 여러 줄이면 <b>문장</b>으로 실행 — 문장형은 출력을
+      <span class="mono">y</span> (단일) 또는 <span class="mono">y0..y{n_out-1}</span> 에 대입.
+    </div>
+    <div class="fn-io">
+      <label>n_in <input type="text" id="fnNin"></label>
+      <label>n_out <input type="text" id="fnNout"></label>
+    </div>
+  </div>
 </dialog>
 
 <script>
@@ -889,7 +930,38 @@ svg.addEventListener("dblclick", ev => {
   if (!g) return;
   const b = blk(+g.dataset.blk);
   if (b?.type === "Subsystem") { path.push(b.id); select(null); }
+  else if (b?.type === "PyFunction") openFnEditor(b);    // ƒ 코드 편집기
 });
+
+/* ---------------- PyFunction 코드 편집기 (더블클릭) ---------------- */
+const dlgFn = document.getElementById("dlgFn");
+let fnTarget = null;
+function openFnEditor(b) {
+  if (b.params.expr === null) {
+    status("이 블록은 파이썬 callable 이라 뷰어에서 편집/실행할 수 없습니다 (expr 문자열로 바꾸면 가능).", "err");
+    return;
+  }
+  fnTarget = b;
+  document.getElementById("fnTitle").textContent = `ƒ PyFunction — ${b.name}`;
+  document.getElementById("fnExpr").value = String(b.params.expr);
+  document.getElementById("fnNin").value = b.params.n_in;
+  document.getElementById("fnNout").value = b.params.n_out;
+  dlgFn.showModal();
+}
+document.getElementById("btnFnSave").addEventListener("click", () => {
+  if (!fnTarget) return;
+  const expr = document.getElementById("fnExpr").value.trim();
+  if (!expr) { status("코드가 비어 있습니다.", "err"); return; }
+  const nin = parseInt(document.getElementById("fnNin").value, 10);
+  const nout = parseInt(document.getElementById("fnNout").value, 10);
+  fnTarget.params.expr = expr;
+  if (nin >= 0) fnTarget.params.n_in = nin;
+  if (nout >= 1) fnTarget.params.n_out = nout;
+  pruneWires(fnTarget);
+  dlgFn.close(); fnTarget = null;
+  render();
+});
+document.getElementById("btnFnCancel").addEventListener("click", () => { dlgFn.close(); fnTarget = null; });
 document.addEventListener("keydown", ev => {
   if (/input|textarea/i.test(document.activeElement?.tagName || "")) return;
   if (ev.key === "Escape" && path.length) { navigateTo(path.length - 1); return; }
@@ -1039,7 +1111,7 @@ function addBlock(type) {
 function renderInspector() {
   const box = document.getElementById("bsInspBody");
   box.className = "";
-  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· <b>와이어 가운데 세그먼트 드래그 → 배선 조정</b> (더블클릭 → 자동 배선)<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
+  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· <b>와이어 가운데 세그먼트 드래그 → 배선 조정</b> (더블클릭 → 자동 배선)<br>· <b>PyFunction 더블클릭 → 코드 편집기</b> (여러 줄 문장 지원)<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
   if (!selection) { box.className = "empty-note"; box.innerHTML = help; return; }
   box.innerHTML = "";
   if (selection.kind === "wire") {
@@ -1087,7 +1159,9 @@ function renderInspector() {
   head.className = "hint mono"; head.textContent = b.type;
   box.appendChild(head);
   mkField("name", b.name, v => { b.name = v.trim() || b.name; });
+  if (b.type === "PyFunction") mkBtn("ƒ 코드 편집기 (더블클릭)", "", () => openFnEditor(b));
   for (const p in b.params) {
+    if (b.type === "PyFunction" && p === "expr") continue;   // expr 는 코드 편집기에서
     const cur_ = b.params[p];
     mkField(p, Array.isArray(cur_) ? cur_.join(", ") : (cur_ === null ? "(callable — 실행 불가)" : String(cur_)),
       v => {

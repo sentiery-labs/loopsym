@@ -15,9 +15,8 @@ from .core import Block
 
 # PyFunction 의 식(expr) 안에서 쓸 수 있는 안전한 이름들
 _MATH_ENV = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
-_MATH_ENV["abs"] = abs
-_MATH_ENV["min"] = min
-_MATH_ENV["max"] = max
+for _f in (abs, min, max, sum, round, len):
+    _MATH_ENV[_f.__name__] = _f
 
 
 # ----------------------------------------------------------------------
@@ -121,12 +120,15 @@ class Product(Block):
 class PyFunction(Block):
     """MATLAB Function 블록의 파이썬판.
 
-    두 가지 사용법:
+    세 가지 사용법:
       1) 식 문자열 — 입력은 u0, u1, ... 시간은 t, math 함수 사용 가능.
            PyFunction("4.0*u0 - 1.2*u1", n_in=2)
-      2) 파이썬 callable — func(t, u0, u1, ...) -> float 또는 tuple
+      2) 여러 줄 문장 — 출력을 y (단일) 또는 y0..y{n_out-1} 에 대입.
+           PyFunction("e = u0 - u1\\ny0 = 3*e\\ny1 = 2*e", n_in=2, n_out=2)
+         (뷰어에서 블록 더블클릭 → 코드 편집기로 작성)
+      3) 파이썬 callable — func(t, u0, u1, ...) -> float 또는 tuple
            PyFunction(func=my_controller, n_in=2)
-    식 문자열 방식은 다이어그램 뷰어(HTML)로 내보낼 때도 그대로 동작한다.
+    문자열 방식(1, 2)은 다이어그램 뷰어(HTML)로 내보낼 때도 그대로 동작한다.
     """
 
     def __init__(self, expr=None, func=None, n_in=1, n_out=1, name=None):
@@ -136,14 +138,33 @@ class PyFunction(Block):
         self.expr, self.func = expr, func
         self.n_in, self.n_out = n_in, n_out
         if expr is not None:
-            self._code = compile(expr, f"<PyFunction {self.name}>", "eval")
+            try:                    # 한 줄 식이면 eval, 아니면 문장(exec)으로
+                self._code = compile(expr, f"<PyFunction {self.name}>", "eval")
+                self._is_expr = True
+            except SyntaxError:
+                self._code = compile(expr, f"<PyFunction {self.name}>", "exec")
+                self._is_expr = False
 
     def output(self, t, u, x):
         if self.func is not None:
             y = self.func(t, *u)
-        else:
+        elif self._is_expr:
             env = dict(_MATH_ENV, t=t, **{f"u{i}": v for i, v in enumerate(u)})
             y = eval(self._code, {"__builtins__": {}}, env)
+        else:
+            # 문장형: 전부 globals 로 실행 (locals 분리 시 컴프리헨션이 u0 를 못 봄)
+            g = dict(_MATH_ENV, __builtins__={}, t=t,
+                     **{f"u{i}": v for i, v in enumerate(u)})
+            exec(self._code, g)
+            if self.n_out == 1:
+                y = g.get("y", g.get("y0"))
+                if y is None:
+                    raise ValueError(f"{self.name}: 문장형 코드는 출력을 y (또는 y0) 에 대입해야 함")
+            else:
+                missing = [f"y{i}" for i in range(self.n_out) if f"y{i}" not in g]
+                if missing:
+                    raise ValueError(f"{self.name}: 출력 {', '.join(missing)} 이 대입되지 않음")
+                y = tuple(g[f"y{i}"] for i in range(self.n_out))
         return y if isinstance(y, tuple) else (y,)
 
 
