@@ -57,6 +57,8 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
 - Simulink 식 도형: Gain ▷ 삼각형(값 내부 표시), Sum ○ 원(부호 표시),
   Product ×/÷, Integrator `1/s`, TransferFunction 분수 표기, Scope 파형 아이콘
 - 블록 드래그, 출력→입력 포트 드래그로 와이어 연결/재연결, Delete 로 삭제
+- **Simulink 식 직교 배선**: 자동 배선이 다른 블록을 피해 가고, 와이어
+  가운데 세그먼트를 드래그하면 수동 배선(저장/열기 보존). 더블클릭 = 자동 복귀
 - **Shift+클릭 다중 선택 → "서브시스템으로 묶기"** (경계 Inport/Outport 자동 생성),
   더블클릭으로 내부 진입(브레드크럼/Esc 로 상위), "풀기"로 해체
 - 우측 인스펙터에서 파라미터 수정 후 ▶ 실행 — **Pyodide 가 파이썬 blocksim

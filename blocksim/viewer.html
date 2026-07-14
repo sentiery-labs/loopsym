@@ -179,9 +179,11 @@
   #bsSvg .port.in  { fill: var(--canvas); }
   #bsSvg .port.out { fill: var(--accent); stroke: var(--accent); }
   #bsSvg .port:hover { stroke-width: 3; }
-  #bsSvg .wire { fill: none; stroke: var(--wire); stroke-width: 1.8; cursor: pointer; }
+  #bsSvg .wire { fill: none; stroke: var(--wire); stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
   #bsSvg .wire.sel { stroke: var(--accent); stroke-width: 3; }
   #bsSvg .wirehit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+  #bsSvg .wirehit.drag-h { cursor: ew-resize; }   /* 세로 세그 → 좌우로 끈다 */
+  #bsSvg .wirehit.drag-v { cursor: ns-resize; }   /* 가로 세그 → 상하로 끈다 */
   #bsSvg .tmpwire {
     fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 5 4;
     pointer-events: none;
@@ -470,9 +472,92 @@ function el(name, attrs, parent) {
   return e;
 }
 function txt(parent, attrs, s) { const t = el("text", attrs, parent); t.textContent = s; return t; }
-function wirePath(x1, y1, x2, y2) {
-  const dx = Math.max(40, Math.abs(x2 - x1) * 0.5);
-  return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+/* ---------------- 배선 (Simulink 식 직교 라우팅 + 수동 조정) ----------------
+ * 와이어는 수평/수직 세그먼트의 폴리라인. 자동 배선은 다른 블록을 피해
+ * 경로를 고르고, 사용자가 가운데 세그먼트를 드래그하면 wire.pts 에 내부
+ * 꼭짓점이 저장되어 수동 배선이 된다 (저장/열기 JSON 에 보존).
+ * 더블클릭 또는 "자동 배선으로 리셋" 버튼 → pts 삭제 = 자동 복귀. */
+/*ROUTING-BEGIN*/  // 순수 함수 구간 — tests/test_wire_routing.py 가 node 로 검증
+function segHitsRect(x1, y1, x2, y2, r) {   // 직교 세그먼트 vs 사각형 [x,y,w,h]
+  const [rx, ry, rw, rh] = r;
+  if (y1 === y2)
+    return y1 > ry && y1 < ry + rh && Math.max(x1, x2) > rx && Math.min(x1, x2) < rx + rw;
+  return x1 > rx && x1 < rx + rw && Math.max(y1, y2) > ry && Math.min(y1, y2) < ry + rh;
+}
+function polyHits(poly, rects) {
+  for (let i = 0; i < poly.length - 1; i++)
+    for (const r of rects)
+      if (segHitsRect(poly[i][0], poly[i][1], poly[i + 1][0], poly[i + 1][1], r)) return true;
+  return false;
+}
+function healPoly(start, pts, end) {
+  // [start, ...pts, end] 를 직교 폴리라인으로 — 어긋난 인접쌍엔 코너 삽입
+  // (블록을 옮기면 포트 endpoint 가 움직여 어긋날 수 있다)
+  const poly = [start, ...pts, end];
+  const out = [poly[0]];
+  for (let i = 1; i < poly.length; i++) {
+    const a = out[out.length - 1], b = poly[i];
+    if (a[0] !== b[0] && a[1] !== b[1]) out.push([b[0], a[1]]);
+    out.push(b);
+  }
+  return out;
+}
+function tidyPoly(poly) {
+  // 중복점 제거 + 일직선 위 꼭짓점 병합 (드래그 뒤 정리)
+  const p = [poly[0]];
+  for (let i = 1; i < poly.length; i++) {
+    const a = p[p.length - 1], b = poly[i];
+    if (a[0] !== b[0] || a[1] !== b[1]) p.push(b);
+  }
+  const out = [p[0]];
+  for (let i = 1; i < p.length - 1; i++) {
+    const a = out[out.length - 1], b = p[i], c = p[i + 1];
+    if ((a[0] === b[0] && b[0] === c[0]) || (a[1] === b[1] && b[1] === c[1])) continue;
+    out.push(b);
+  }
+  if (p.length > 1) out.push(p[p.length - 1]);
+  return out;
+}
+function autoRoute(x1, y1, x2, y2, rects) {
+  const S = 20;                                          // 포트 스텁 길이
+  const snap = v => Math.round(v / 10) * 10;
+  if (x2 - x1 >= 2 * S) {
+    // 전진 연결: ㄹ자 — 세로 세그 위치(mx)를 블록 회피로 고른다
+    const z = mx => [[x1, y1], [mx, y1], [mx, y2], [x2, y2]];
+    const base = snap((x1 + x2) / 2);
+    const cands = [base];
+    for (let d = 20; d <= 400; d += 20) {
+      if (base - d > x1 + S) cands.push(base - d);
+      if (base + d < x2 - S) cands.push(base + d);
+    }
+    for (const mx of cands) if (!polyHits(z(mx), rects)) return z(mx);
+    // ㄹ자로 못 피하면(예: 일직선 경로가 블록 관통) 위/아래 우회
+    const xa = x1 + S, xb = x2 - S;
+    const u = my => [[x1, y1], [xa, y1], [xa, my], [xb, my], [xb, y2], [x2, y2]];
+    const ybase = snap((y1 + y2) / 2);
+    for (let d = 20; d <= 600; d += 20)
+      for (const my of [ybase - d, ybase + d])
+        if (!polyHits(u(my), rects)) return tidyPoly(u(my));
+    return z(base);
+  }
+  // 피드백(역방향): 오른쪽 스텁 → 위/아래 우회 → 왼쪽에서 진입
+  const outX = x1 + S, inX = x2 - S;
+  const u = my => [[x1, y1], [outX, y1], [outX, my], [inX, my], [inX, y2], [x2, y2]];
+  const base = snap((y1 + y2) / 2);
+  const cands = [base];
+  for (let d = 20; d <= 600; d += 20) cands.push(base - d, base + d);
+  for (const my of cands) if (!polyHits(u(my), rects)) return tidyPoly(u(my));
+  return u(base);
+}
+/*ROUTING-END*/
+const polyPath = poly => poly.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
+function wirePoly(cm, w, sb, db) {
+  const [x1, y1] = outPos(sb, w.src[1]), [x2, y2] = inPos(db, w.dst[1]);
+  if (w.pts && w.pts.length) return healPoly([x1, y1], w.pts, [x2, y2]);
+  // 자기 자신(소스/목적지 블록)은 회피 대상에서 제외 — 포트가 몸에 붙어 있으므로
+  const rects = cm.blocks.filter(b => b !== sb && b !== db)
+    .map(b => [b.x - 8, b.y - 8, bW(b) + 16, bH(b) + 16]);
+  return autoRoute(x1, y1, x2, y2, rects);
 }
 
 function drawShape(g, b) {
@@ -614,10 +699,15 @@ function render() {
   cm.wires.forEach((w, wi) => {
     const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
     if (!sb || !db) return;
-    const [x1, y1] = outPos(sb, w.src[1]), [x2, y2] = inPos(db, w.dst[1]);
-    const d = wirePath(x1, y1, x2, y2);
-    el("path", { d, class: "wirehit", "data-wire": wi }, svg);
-    el("path", { d, class: "wire" + (selection?.kind === "wire" && selection.index === wi ? " sel" : ""), "data-wire": wi }, svg);
+    const poly = wirePoly(cm, w, sb, db);
+    el("path", { d: polyPath(poly), class: "wire" + (selection?.kind === "wire" && selection.index === wi ? " sel" : ""), "data-wire": wi }, svg);
+    // 세그먼트별 히트 경로 — 가운데 세그먼트는 드래그로 배선 조정
+    for (let s = 0; s < poly.length - 1; s++) {
+      const cls = "wirehit" + (s > 0 && s < poly.length - 2
+        ? (poly[s][0] === poly[s + 1][0] ? " drag-h" : " drag-v") : "");
+      el("path", { d: `M ${poly[s][0]} ${poly[s][1]} L ${poly[s + 1][0]} ${poly[s + 1][1]}`,
+                   class: cls, "data-wire": wi, "data-seg": s }, svg);
+    }
   });
 
   for (const b of cm.blocks) {
@@ -714,7 +804,15 @@ svg.addEventListener("pointerdown", ev => {
       })) };
       svg.setPointerCapture(ev.pointerId);
     } else if (t.dataset.wire !== undefined) {
-      select({ kind: "wire", index: +t.dataset.wire });
+      // 클릭 = 선택, 가운데 세그먼트 드래그 = 배선 조정 (4px 이동 후 판정)
+      const wi = +t.dataset.wire;
+      const w = cm.wires[wi];
+      const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
+      const poly = wirePoly(cm, w, sb, db);
+      const seg = +(t.dataset.seg ?? -1);
+      drag = { kind: "wireseg", wi, seg, poly, moved: false,
+               draggable: seg > 0 && seg < poly.length - 2, sx: mx, sy: my };
+      svg.setPointerCapture(ev.pointerId);
     } else {
       select(null);
     }
@@ -734,7 +832,21 @@ svg.addEventListener("pointermove", ev => {
     const sb = blk(drag.srcId);
     const [x1, y1] = outPos(sb, drag.srcPort);
     if (!drag.path.isConnected) svg.appendChild(drag.path);
-    drag.path.setAttribute("d", wirePath(x1, y1, mx, my));
+    drag.path.setAttribute("d", polyPath(autoRoute(x1, y1, mx, my, [])));
+  } else if (drag.kind === "wireseg") {
+    if (!drag.moved) {
+      if (Math.hypot(mx - drag.sx, my - drag.sy) < 4 || !drag.draggable) return;
+      const w = cur().wires[drag.wi];
+      if (!w.pts || !w.pts.length)                       // 첫 드래그: 자동 배선을 실체화
+        w.pts = drag.poly.slice(1, -1).map(p => p.slice());
+      drag.moved = true;
+    }
+    const w = cur().wires[drag.wi];
+    const a = w.pts[drag.seg - 1], b = w.pts[drag.seg];
+    if (!a || !b) return;
+    if (a[0] === b[0]) a[0] = b[0] = Math.round(mx / 10) * 10;   // 세로 세그 → 좌우
+    else a[1] = b[1] = Math.round(my / 10) * 10;                 // 가로 세그 → 상하
+    render();
   }
 });
 svg.addEventListener("pointerup", ev => {
@@ -748,11 +860,31 @@ svg.addEventListener("pointerup", ev => {
       cm.wires.push({ src: [drag.srcId, drag.srcPort], dst: [dstId, dstPort] });
     }
     drag.path.remove();
+  } else if (drag?.kind === "wireseg") {
+    if (!drag.moved) {
+      select({ kind: "wire", index: drag.wi });
+      drag = null;
+      return;                       // select() 가 render() 를 부른다
+    }
+    // 드래그 종료: 폴리라인 정리(중복/일직선 병합) 후 내부 꼭짓점만 저장
+    const cm = cur();
+    const w = cm.wires[drag.wi];
+    const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
+    if (w && sb && db) {
+      const poly = tidyPoly(healPoly(outPos(sb, w.src[1]), w.pts, inPos(db, w.dst[1])));
+      w.pts = poly.slice(1, -1);
+      if (!w.pts.length) delete w.pts;   // 일직선으로 정리됐으면 자동 배선 복귀
+    }
   }
   drag = null;
   render();
 });
 svg.addEventListener("dblclick", ev => {
+  if (ev.target.dataset?.wire !== undefined) {           // 와이어 더블클릭 = 자동 배선 리셋
+    const w = cur().wires[+ev.target.dataset.wire];
+    if (w?.pts) { delete w.pts; render(); status("자동 배선으로 리셋했습니다.", ""); }
+    return;
+  }
   const g = ev.target.closest("[data-blk]");
   if (!g) return;
   const b = blk(+g.dataset.blk);
@@ -907,7 +1039,7 @@ function addBlock(type) {
 function renderInspector() {
   const box = document.getElementById("bsInspBody");
   box.className = "";
-  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
+  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· <b>와이어 가운데 세그먼트 드래그 → 배선 조정</b> (더블클릭 → 자동 배선)<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
   if (!selection) { box.className = "empty-note"; box.innerHTML = help; return; }
   box.innerHTML = "";
   if (selection.kind === "wire") {
@@ -915,7 +1047,14 @@ function renderInspector() {
     const w = cm.wires[selection.index];
     if (!w) { select(null); return; }
     const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
-    box.innerHTML = `<div class="hint mono">${sb.name}[${w.src[1]}] → ${db.name}[u${w.dst[1]}]</div>`;
+    box.innerHTML = `<div class="hint mono">${sb.name}[${w.src[1]}] → ${db.name}[u${w.dst[1]}]</div>
+      <div class="hint">가운데 세그먼트를 드래그해 배선을 옮길 수 있습니다.</div>`;
+    if (w.pts) {
+      const rst = document.createElement("button");
+      rst.textContent = "자동 배선으로 리셋 (더블클릭)";
+      rst.addEventListener("click", () => { delete w.pts; render(); });
+      box.appendChild(rst);
+    }
     const del = document.createElement("button");
     del.className = "danger"; del.textContent = "와이어 삭제";
     del.addEventListener("click", () => { cm.wires.splice(selection.index, 1); select(null); });

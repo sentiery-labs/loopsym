@@ -86,10 +86,13 @@ def export_json(bd):
         if cls == "Subsystem":
             entry["inner"] = export_json(b.inner)   # 재귀 — 내부 다이어그램
         blocks.append(entry)
-    wires = [
-        {"src": [idx[s.block], s.index], "dst": [idx[d.block], d.index]}
-        for d, s in bd.wires.items()
-    ]
+    meta = getattr(bd, "_wire_meta", {})     # 뷰어의 수동 배선 꼭짓점 (load_json 이 채움)
+    wires = []
+    for d, s in bd.wires.items():
+        w = {"src": [idx[s.block], s.index], "dst": [idx[d.block], d.index]}
+        if d in meta:
+            w["pts"] = meta[d]
+        wires.append(w)
     return {"blocks": blocks, "wires": wires}
 
 
@@ -139,9 +142,12 @@ def load_json(src):
                 b = cls(name=bj["name"], **params)
             b._pos = (bj.get("x", 0), bj.get("y", 0))   # 뷰어 좌표 보존
             byid[bj["id"]] = d.add(b)
+        d._wire_meta = {}                    # 수동 배선 좌표 보존 (엔진 의미론과 무관)
         for w in j["wires"]:
             s, ds = w["src"], w["dst"]
             d.connect(byid[s[0]][s[1]], byid[ds[0]][ds[1]])
+            if w.get("pts"):
+                d._wire_meta[Port(byid[ds[0]], ds[1])] = [list(p) for p in w["pts"]]
         return d
 
     return build(src)
