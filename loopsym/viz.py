@@ -224,13 +224,20 @@ def _engine_sources():
     return out
 
 
-def render_html(bd, path, title="loopsym viewer"):
-    """모델을 심은 단독 HTML 파일을 만든다. 반환: 절대 경로."""
+def render_html(bd, path, title="loopsym viewer", t_end=None, dt=None):
+    """모델을 심은 단독 HTML 파일을 만든다. 반환: 절대 경로.
+
+    t_end/dt 를 주면 뷰어 툴바 기본값으로 심는다 — dt 는 모델의 이산
+    샘플타임의 약수여야 실행이 된다 (예: 드론 체인은 dt=0.004)."""
     template = os.path.join(os.path.dirname(__file__), "viewer.html")
     with open(template, encoding="utf-8") as f:
         html = f.read()
     model = json.dumps(export_json(bd), ensure_ascii=False)
     html = html.replace("/*__MODEL_JSON__*/null", model)
+    if t_end is not None or dt is not None:
+        defaults = {"t_end": t_end if t_end is not None else 10.0,
+                    "dt": dt if dt is not None else 0.01}
+        html = html.replace("/*__SIM_DEFAULTS__*/null", json.dumps(defaults))
     # 엔진 소스 주입. "</" 는 "<\/" 로 — 소스 안의 문자열이 </script> 로 오인되는 것 방지
     sources = json.dumps(_engine_sources(), ensure_ascii=False).replace("</", "<\\/")
     html = html.replace("/*__BLOCKSIM_SRC__*/null", sources)

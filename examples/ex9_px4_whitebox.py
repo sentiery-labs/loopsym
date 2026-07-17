@@ -362,5 +362,6 @@ if __name__ == "__main__":
 
     here = os.path.dirname(os.path.abspath(__file__))
     out = render_html(bd, os.path.join(here, "ex9_diagram.html"),
-                      title="ex9 — PX4 v1.16 화이트박스 (더블클릭으로 진입)")
+                      title="ex9 — PX4 v1.16 화이트박스 (더블클릭으로 진입)",
+                      t_end=8.0, dt=DT)
     print("뷰어:", out, " (서브시스템 더블클릭 → PX4 내부로)")

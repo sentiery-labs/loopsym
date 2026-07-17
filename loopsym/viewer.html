@@ -380,6 +380,15 @@
  * ================================================================ */
 
 const EMBEDDED = /*__MODEL_JSON__*/null;
+// render_html(t_end=, dt=) 이 심는 시뮬레이션 기본값 — 모델의 이산 샘플타임과
+// 정합한 값 (예: 드론 체인은 dt=0.004). 없으면 툴바 기본값 유지.
+const SIM_DEFAULTS = /*__SIM_DEFAULTS__*/null;
+if (SIM_DEFAULTS) {
+  addEventListener("DOMContentLoaded", () => {
+    document.getElementById("inTend").value = String(SIM_DEFAULTS.t_end);
+    document.getElementById("inDt").value = String(SIM_DEFAULTS.dt);
+  });
+}
 // render_html() 이 파이썬 엔진 소스를 심는 자리 ({파일명: 소스}). 원본
 // viewer.html 을 직접 열면 null — 이때는 옆의 .py 파일을 fetch 한다 (HTTP 서빙 필요).
 const BLOCKSIM_SRC = /*__BLOCKSIM_SRC__*/null;
@@ -1359,16 +1368,23 @@ async function fetchEngineSources() {
 }
 
 async function initEngine() {
-  let jsUrl = null;
+  // file:// 로 연 페이지는 vendored 사본의 ES 모듈 import 가 브라우저 보안에
+  // 막힌다 — CDN 만 시도. (오프라인 교실은 server 모드/http.server 로 서빙)
+  const urls = location.protocol === "file:" ? PYODIDE_URLS.slice(-1) : PYODIDE_URLS;
+  let py = null;
   const tried = [];
-  for (const u of PYODIDE_URLS) {
-    try { jsUrl = await loadScriptTag(u); break; } catch { tried.push(u); }
+  for (const u of urls) {
+    try {
+      const jsUrl = await loadScriptTag(u);
+      const indexURL = new URL(jsUrl, location.href).href.replace(/pyodide\.js.*$/, "");
+      py = await loadPyodide({ indexURL });   // 스크립트는 붙어도 여기서 죽을 수 있다 → 다음 URL
+      break;
+    } catch (e) { tried.push(u); }
   }
-  if (!jsUrl)
+  if (!py)
     throw new Error("Pyodide 로드 실패 (시도: " + tried.join(" → ") +
-      "). 오프라인 환경이면 tools/vendor_pyodide.py 로 로컬 사본을 설치하세요.");
-  const indexURL = new URL(jsUrl, location.href).href.replace(/pyodide\.js.*$/, "");
-  const py = await loadPyodide({ indexURL });
+      "). 인터넷이 없으면 로컬 서버로 여세요: python -m loopsym.server " +
+      "또는 python -m http.server (vendored 사본은 tools/vendor_pyodide.py).");
   const src = await fetchEngineSources();
   py.FS.mkdirTree("/app/loopsym");
   for (const f in src) py.FS.writeFile("/app/loopsym/" + f, src[f]);

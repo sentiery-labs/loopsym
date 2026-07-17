@@ -61,5 +61,6 @@ if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     bd, _ = build("ideal")
     out = render_html(bd, os.path.join(here, "ex8_diagram.html"),
-                      title="ex8 — IMU fidelity (CLD-P62)")
+                      title="ex8 — IMU fidelity (CLD-P62)",
+                      t_end=4.0, dt=DT)
     print("뷰어:", out, " (IMU 더블클릭 → fidelity=noisy 로 바꿔 재실행)")

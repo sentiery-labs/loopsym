@@ -69,5 +69,6 @@ if __name__ == "__main__":
     assert abs(n - 2.0) < 0.1 and abs(e) < 0.1 and abs(d + 6.0) < 0.1
     here = os.path.dirname(os.path.abspath(__file__))
     out = render_html(bd, os.path.join(here, "ex7_diagram.html"),
-                      title="ex7 — PX4 드론 위치제어 (CLD-P65)")
+                      title="ex7 — PX4 드론 위치제어 (CLD-P65)",
+                      t_end=8.0, dt=DT)
     print("뷰어:", out)
