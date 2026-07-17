@@ -42,6 +42,9 @@ _PARAMS = {
     "RateController": ["st"],
     "PositionController": ["st"],
     "QuadXMixer": [],
+    "EulerToQuat": [],
+    "QuatAttitudeError": ["yaw_w"],
+    "AccelToAttitude": ["hover", "thr_min"],
     # 센서 팔레트 (sensors.py, CLD-P62 — fidelity 규약)
     "IMU": ["fidelity", "gyro_bias", "gyro_nd", "accel_bias", "accel_nd",
             "g", "seed", "st"],

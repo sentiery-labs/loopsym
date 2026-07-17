@@ -188,6 +188,30 @@ class QuadPlant(Block):
         return tuple(dq) + tuple(dw) + tuple(vel) + tuple(acc)
 
 
+def _att_error_quat(q, qd, yaw_w):
+    """AttitudeControl.cpp (Brescianini): 자세오차 eq = 2·vec(q⁻¹⊗qd_mixed).
+
+    roll/pitch 를 우선하기 위해 yaw 를 무시한 축소 목표자세를 만들고,
+    delta-yaw 성분을 yaw_w 로 스케일해 재결합한다."""
+    q = _qnorm(q)
+    e_z, e_z_d = _dcm_z(q), _dcm_z(qd)
+    qd_red = _q_from_two_vectors(e_z, e_z_d)
+    if abs(qd_red[1]) > 1 - 1e-5 or abs(qd_red[2]) > 1 - 1e-5:
+        qd_red = qd                       # 추력 방향 정반대 특이점
+    else:
+        qd_red = _qmult(qd_red, q)
+
+    qd_dyaw = _q_canonical(_qmult(_qinv(qd_red), qd))
+    w0 = _clip(qd_dyaw[0], -1.0, 1.0)
+    z0 = _clip(qd_dyaw[3], -1.0, 1.0)
+    dyaw = [math.cos(yaw_w * math.acos(w0)), 0.0, 0.0,
+            math.sin(yaw_w * math.asin(z0))]
+    qd = _qmult(qd_red, dyaw)
+
+    qe = _q_canonical(_qmult(_qinv(q), qd))
+    return [2.0 * qe[1], 2.0 * qe[2], 2.0 * qe[3]]
+
+
 # ----------------------------------------------------------------------
 # Control
 # ----------------------------------------------------------------------
@@ -235,28 +259,8 @@ class AttitudeController(Block):
         self.rate_limit = tuple(r * math.pi / 180.0 for r in (220.0, 220.0, 200.0))
 
     def output(self, t, u, x):
-        q = _qnorm(list(u[0:4]))
-        qd = _eul2quat(u[4], u[5], u[6])
-
-        # roll/pitch 우선: yaw 를 무시한 축소 목표자세
-        e_z, e_z_d = _dcm_z(q), _dcm_z(qd)
-        qd_red = _q_from_two_vectors(e_z, e_z_d)
-        if abs(qd_red[1]) > 1 - 1e-5 or abs(qd_red[2]) > 1 - 1e-5:
-            qd_red = qd                       # 추력 방향 정반대 특이점
-        else:
-            qd_red = _qmult(qd_red, q)
-
-        # delta-yaw 를 yaw_w 로 스케일해 재결합
-        qd_dyaw = _q_canonical(_qmult(_qinv(qd_red), qd))
-        w0 = _clip(qd_dyaw[0], -1.0, 1.0)
-        z0 = _clip(qd_dyaw[3], -1.0, 1.0)
-        yw = self.yaw_w
-        dyaw = [math.cos(yw * math.acos(w0)), 0.0, 0.0, math.sin(yw * math.asin(z0))]
-        qd = _qmult(qd_red, dyaw)
-
-        # 쿼터니언 자세 오차 -> 각속도 setpoint
-        qe = _q_canonical(_qmult(_qinv(q), qd))
-        rate_sp = [2.0 * qe[1 + i] * self.att_p[i] for i in range(3)]
+        eq = _att_error_quat(list(u[0:4]), _eul2quat(u[4], u[5], u[6]), self.yaw_w)
+        rate_sp = [eq[i] * self.att_p[i] for i in range(3)]
         return tuple(_clip(r, -L, L) for r, L in zip(rate_sp, self.rate_limit))
 
 
@@ -365,30 +369,7 @@ class PositionController(Block):
 
     def output(self, t, u, xd):
         acc, _, yaw_sp = self._cascade(u, xd)
-
-        # ===== PositionControl::_accelerationControl() =====
-        bz = [-acc[0], -acc[1], _G]
-        n = math.sqrt(sum(c * c for c in bz))
-        bz = [c / n for c in bz]
-        # limitTilt(bz, [0,0,1], TILT_MAX)
-        dp = _clip(bz[2], -1.0, 1.0)
-        ang = min(math.acos(dp), self.TILT_MAX)
-        rej = [bz[0], bz[1], bz[2] - dp]
-        rn = math.sqrt(sum(c * c for c in rej))
-        rej = [1.0, 0.0, 0.0] if rn * rn < 1e-12 else [c / rn for c in rej]
-        bz = [math.cos(ang) * w + math.sin(ang) * r
-              for w, r in zip((0.0, 0.0, 1.0), rej)]
-
-        coll = acc[2] * (self.THR_HOVER / _G) - self.THR_HOVER
-        coll = coll / bz[2]                       # 계획 자세로 추력 투영
-        coll = min(coll, -self.THR_MIN)           # 음수(위), 최소추력 보장
-        thr_sp = [c * coll for c in bz]
-
-        # ===== ControlMath::thrustToAttitude() -> 오일러 =====
-        q_sp = _bodyz_to_attitude([-c for c in thr_sp], yaw_sp)
-        eul = _quat2eul(q_sp)
-        thrust = math.sqrt(sum(c * c for c in thr_sp))
-        return (eul[0], eul[1], eul[2], thrust)
+        return _accel_to_att(acc, yaw_sp)
 
     def update(self, t, u, xd):
         _, err, _ = self._cascade(u, xd)
@@ -396,6 +377,32 @@ class PositionController(Block):
         return (_clip(xd[0] + err[0] * self.XY_VEL_I * dt, -self.INT_LIM, self.INT_LIM),
                 _clip(xd[1] + err[1] * self.XY_VEL_I * dt, -self.INT_LIM, self.INT_LIM),
                 _clip(xd[2] + err[2] * self.VZ_I * dt, -self.INT_LIM, self.INT_LIM))
+
+
+def _accel_to_att(acc, yaw_sp, hover=0.5, thr_min=0.12,
+                  tilt_max=45.0 * math.pi / 180.0):
+    """가속도 setpoint -> (roll, pitch, yaw, thrust).  PX4 실소스 대응:
+    PositionControl::_accelerationControl + ControlMath::thrustToAttitude."""
+    bz = [-acc[0], -acc[1], _G]                   # 수직은 상수 표준중력 (디커플링)
+    n = math.sqrt(sum(c * c for c in bz))
+    bz = [c / n for c in bz]
+    # limitTilt(bz, [0,0,1], tilt_max)
+    dp = _clip(bz[2], -1.0, 1.0)
+    ang = min(math.acos(dp), tilt_max)
+    rej = [bz[0], bz[1], bz[2] - dp]
+    rn = math.sqrt(sum(c * c for c in rej))
+    rej = [1.0, 0.0, 0.0] if rn * rn < 1e-12 else [c / rn for c in rej]
+    bz = [math.cos(ang) * w + math.sin(ang) * r
+          for w, r in zip((0.0, 0.0, 1.0), rej)]
+
+    coll = acc[2] * (hover / _G) - hover
+    coll = coll / bz[2]                           # 계획 자세로 추력 투영
+    coll = min(coll, -thr_min)                    # 음수(위), 최소추력 보장
+    thr_sp = [c * coll for c in bz]
+
+    q_sp = _bodyz_to_attitude([-c for c in thr_sp], yaw_sp)
+    eul = _quat2eul(q_sp)
+    return (eul[0], eul[1], eul[2], math.sqrt(sum(c * c for c in thr_sp)))
 
 
 def _bodyz_to_attitude(body_z, yaw_sp):
@@ -449,6 +456,52 @@ def _bodyz_to_attitude(body_z, yaw_sp):
         q[1] = (R[0][2] + R[2][0]) * s
         q[2] = (R[2][1] + R[1][2]) * s
     return _qnorm(q)
+
+
+# ----------------------------------------------------------------------
+# 화이트박스 조립용 소형 블록 — Simulink 블록판의 MATLAB Function 상당.
+# 캐스케이드/PID/필터는 기본 블록(Gain/Sum/Saturation/UnitDelay)으로 그리고,
+# 쿼터니언 좌표변환만 이 블록들을 쓴다 (examples/ex9 참조).
+# ----------------------------------------------------------------------
+class EulerToQuat(Block):
+    """att_cmd 오일러(ZYX) -> q_sp [w x y z].  (mc/px4_eul2quat.m)"""
+
+    n_in = 3
+    n_out = 4
+
+    def output(self, t, u, x):
+        return tuple(_eul2quat(u[0], u[1], u[2]))
+
+
+class QuatAttitudeError(Block):
+    """q(4)+q_sp(4) -> 자세오차 eq(3) (Brescianini, yaw_w 재결합 포함).
+
+    각속도 setpoint 는 바깥에서 eq × att_p Gain + Saturation 으로 만든다.
+    (mc/px4_att_error.m 상당)"""
+
+    n_in = 8
+    n_out = 3
+
+    def __init__(self, yaw_w=0.4, name=None):
+        super().__init__(name)
+        self.yaw_w = yaw_w
+
+    def output(self, t, u, x):
+        return tuple(_att_error_quat(list(u[0:4]), _qnorm(list(u[4:8])), self.yaw_w))
+
+
+class AccelToAttitude(Block):
+    """acc_sp(3)+yaw_sp -> att_cmd 오일러(3)+thrust.  (mc/px4_accel_to_att.m)"""
+
+    n_in = 4
+    n_out = 4
+
+    def __init__(self, hover=0.5, thr_min=0.12, name=None):
+        super().__init__(name)
+        self.hover, self.thr_min = hover, thr_min
+
+    def output(self, t, u, x):
+        return _accel_to_att(u[0:3], u[3], self.hover, self.thr_min)
 
 
 # ----------------------------------------------------------------------

@@ -417,6 +417,13 @@ const LIB = {
     defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
   QuadXMixer: { cat: "allocation", tag: "mix", nIn: () => 4, nOut: () => 4,
     defaults: {}, summary: () => "quad-X" },
+  // 화이트박스 조립용 좌표변환 (ex9 — 캐스케이드는 기본 블록으로 조립)
+  EulerToQuat: { cat: "control", tag: "eul→q", nIn: () => 3, nOut: () => 4,
+    defaults: {}, summary: () => "" },
+  QuatAttitudeError: { cat: "control", tag: "q err", nIn: () => 8, nOut: () => 3,
+    defaults: { yaw_w: 0.4 }, summary: () => "Brescianini" },
+  AccelToAttitude: { cat: "control", tag: "acc→att", nIn: () => 4, nOut: () => 4,
+    defaults: { hover: 0.5, thr_min: 0.12 }, summary: () => "" },
   // 센서 팔레트 (loopsym.sensors — CLD-P62, fidelity 규약: 포트 불변)
   IMU: { cat: "sensors", tag: "imu", nIn: () => 10, nOut: () => 6,
     defaults: { fidelity: "ideal", gyro_bias: 0.0, gyro_nd: 5e-5,
