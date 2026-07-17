@@ -20,3 +20,4 @@ from .drone import (                           # 드론 팔레트 (CLD-P65)
     QuadXMixer,
 )
 from .sensors import SensorBlock, IMU          # 센서 팔레트 (CLD-P62)
+from .estimation import ComplementaryFilter    # 상태추정 팔레트 (CLD-P64)

@@ -45,6 +45,8 @@ _PARAMS = {
     # 센서 팔레트 (sensors.py, CLD-P62 — fidelity 규약)
     "IMU": ["fidelity", "gyro_bias", "gyro_nd", "accel_bias", "accel_nd",
             "g", "seed", "st"],
+    # 상태추정 팔레트 (estimation.py, CLD-P64)
+    "ComplementaryFilter": ["kp", "ki", "st"],
 }
 
 
@@ -148,8 +150,11 @@ def load_json(src):
                 if cls is None:
                     from . import drone as _drone
                     from . import sensors as _sensors
+                    from . import estimation as _estimation
                     from .core import Block as _Block
-                    cls = getattr(_drone, cls_name, None) or getattr(_sensors, cls_name, None)
+                    cls = (getattr(_drone, cls_name, None)
+                           or getattr(_sensors, cls_name, None)
+                           or getattr(_estimation, cls_name, None))
                     if not (isinstance(cls, type) and issubclass(cls, _Block)):
                         cls = None
                 if cls is None:
@@ -174,7 +179,7 @@ def load_json(src):
 # 뷰어에 심는 엔진 소스 — 뷰어의 Pyodide 가 이 파일들을 그대로 임포트해서 돌린다.
 # (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
 _ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py",
-                 "realtime.py", "ros2.py", "drone.py", "sensors.py"]
+                 "realtime.py", "ros2.py", "drone.py", "sensors.py", "estimation.py"]
 
 
 def _engine_sources():

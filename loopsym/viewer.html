@@ -422,9 +422,12 @@ const LIB = {
     defaults: { fidelity: "ideal", gyro_bias: 0.0, gyro_nd: 5e-5,
                 accel_bias: 0.0, accel_nd: 7e-4, g: 9.81, seed: 0, st: 0.004 },
     summary: p => String(p.fidelity) },
+  // 상태추정 팔레트 (loopsym.estimation — CLD-P64)
+  ComplementaryFilter: { cat: "estimation", tag: "mahony", nIn: () => 6, nOut: () => 7,
+    defaults: { kp: 1.0, ki: 0.05, st: 0.004 }, summary: p => `Kp${p.kp} Ki${p.ki}` },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
-                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)" };
+                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();
