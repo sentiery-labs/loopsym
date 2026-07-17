@@ -1,5 +1,11 @@
 """loopsym — Simulink 원리를 배우는 교육용 미니 블록 다이어그램 시뮬레이터."""
 
+try:                                        # 파이썬 관례: 설치 메타데이터가 진실
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("loopsym")
+except Exception:                           # 미설치 소스 트리/Pyodide 실행
+    __version__ = "unknown"
+
 from .core import Block, Diagram, Port, AlgebraicLoopError
 from .blocks import (
     Constant, Step, Sine,
