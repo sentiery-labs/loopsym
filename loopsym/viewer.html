@@ -138,6 +138,7 @@
     background: var(--block-fill);
   }
   .pal-item small { color: var(--ink-3); float: right; font-size: 10px; }
+  .pal-empty { font-size: 11px; color: var(--ink-3); margin: 3px 0 0 2px; font-style: italic; }
 
   #bsCanvasWrap { overflow: auto; background: var(--canvas); position: relative; }
   #bsCrumb {
@@ -1087,17 +1088,37 @@ function ungroup(sub) {
 /* ---------------- 팔레트 ---------------- */
 const palette = document.getElementById("bsPalette");
 {
-  const groups = { source: "Sources", math: "Math · Function", state: "Continuous", discrete: "Discrete", sub: "Subsystem", sink: "Sinks", ros2: "ROS2" };
-  for (const cat in groups) {
+  // ARCHITECTURE.md §1 확정 카테고리 순서 (왼→오 = 신호 흐름 순). 빈 카테고리도 표시.
+  const groups = [
+    { title: "Sources/Sinks", cats: ["source", "sink"] },
+    { title: "Math", cats: ["math"] },
+    { title: "Continuous/Discrete", cats: ["state", "discrete"] },
+    { title: "Plant", cats: ["plant"] },
+    { title: "Sensors", cats: ["sensors"] },
+    { title: "Estimation", cats: ["estimation"] },
+    { title: "Navigation", cats: ["navigation"] },
+    { title: "Control", cats: ["control"] },
+    { title: "Allocation", cats: ["allocation"] },
+    { title: "Interfaces", cats: ["ros2", "interfaces"] },
+    { title: "Subsystem", cats: ["sub"] },
+  ];
+  for (const g of groups) {
     const h = document.createElement("div");
-    h.className = "pal-head"; h.textContent = groups[cat];
+    h.className = "pal-head"; h.textContent = g.title;
     palette.appendChild(h);
+    let n = 0;
     for (const type in LIB) {
-      if (LIB[type].cat !== cat) continue;
+      if (!g.cats.includes(LIB[type].cat)) continue;
       const btn = document.createElement("button");
       btn.className = "pal-item"; btn.innerHTML = `+ ${type} <small>${LIB[type].tag}</small>`;
       btn.addEventListener("click", () => addBlock(type));
       palette.appendChild(btn);
+      n++;
+    }
+    if (!n) {
+      const e = document.createElement("div");
+      e.className = "pal-empty"; e.textContent = "(준비 중)";
+      palette.appendChild(e);
     }
   }
 }
