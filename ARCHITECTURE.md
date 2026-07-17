@@ -22,13 +22,17 @@
 | Sources/Sinks | Constant, Step, Sine, Scope, Logger | 기존 |
 | Math | Gain, Sum, Product, Saturation, PyFunction | 기존 |
 | Continuous/Discrete | Integrator, TransferFunction, UnitDelay, ... | 기존 |
-| Plant | 6-DoF Quad, 6-DoF Tiltrotor, Motor Dynamics, **Gazebo Bridge** | 6-DoF는 P40 벤치마크 코드 승격 |
 | Sensors | IMU(가속도+자이로), GPS, Barometer, Magnetometer, Rangefinder, OpticalFlow | 신규 — §2 규약 적용 |
 | Estimation | Complementary Filter, EKF(간이), Attitude Fusion | 신규 |
 | Navigation | Waypoint Manager, Path Follower, L1 Guidance | 신규 |
 | Control | PID, Rate Controller, Attitude Controller, Position Controller (PX4 v1.16 대응) | PX4 MATLAB 코드 이식 |
-| Allocation | Quad-X Mixer, Tiltrotor Mixer | PX4 MATLAB 코드 이식 |
+| Allocation | Mixer (quad X/+, hexa X, octo X), Tiltrotor Mixer | PX4 MATLAB 코드 이식 |
+| Plant | 6-DoF Multirotor(프레임 선택), 6-DoF Tiltrotor, Motor Dynamics, **Gazebo Bridge** | 6-DoF는 P40 벤치마크 코드 승격 |
 | Interfaces | MAVLink Source/Sink (P41), ROS2 Pub/Sub (P44), Serial(HILS) | P41/P44에서 진행 중 |
+
+> 2026-07-18 개정(충박사 결정): Plant 를 표/팔레트에서 신호사슬 끝(맨 오른쪽)으로
+> 이동 — §1 신호사슬 다이어그램과 순서 일치. Allocation 의 Mixer 는 프레임
+> (quad X/+, hexa, octo) 선택형.
 
 뷰어의 블록 팔레트 UI도 이 카테고리 순서(왼쪽→오른쪽 = 신호 흐름 순서)로 표시한다.
 

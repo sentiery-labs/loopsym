@@ -35,13 +35,14 @@ _PARAMS = {
     "Ros2Subscribe": ["topic", "msg_type", "fields", "st", "defaults"],
     "Ros2Publish": ["topic", "msg_type", "fields"],
     # 드론 팔레트 (drone.py, CLD-P65)
-    "QuadPlant": ["m", "g", "ixx", "iyy", "izz", "arm", "c_m",
+    "QuadPlant": ["frame", "m", "g", "ixx", "iyy", "izz", "arm", "c_m",
                   "roll0", "pitch0", "yaw0", "z0"],
     "PID": ["kp", "ki", "kd", "st", "lim"],
     "AttitudeController": ["roll_p", "pitch_p", "yaw_p", "yaw_w"],
     "RateController": ["st"],
     "PositionController": ["st"],
     "QuadXMixer": [],
+    "Mixer": ["frame"],
     "EulerToQuat": [],
     "QuatAttitudeError": ["yaw_w"],
     "AccelToAttitude": ["hover", "thr_min"],
@@ -54,19 +55,48 @@ _PARAMS = {
 
 
 def _auto_layout(bd):
-    """왼쪽에서 오른쪽으로 층(layer)을 나눠 좌표를 정한다.
+    """왼쪽에서 오른쪽으로 층(layer)을 나눠 좌표를 정한다 = 신호 흐름 순서.
 
-    compile() 이 준 실행 순서를 기준으로, '앞선 블록 -> 뒤 블록' 와이어만
-    층 계산에 쓰고 피드백 와이어는 무시한다 (그림에서 되돌아가는 선이 된다).
+    피드백 와이어만 층 계산에서 빼고(그림에서 되돌아가는 선), 나머지로
+    최장경로 층을 매긴다. 피드백 판정: 상태블록(feedthrough=False)의 출력
+    와이어 중 '목적지에서 소스로 되돌아올 수 있는' 것 — 모든 사이클은
+    상태블록을 지나므로(대수루프 검사 보장) 이것만 빼면 DAG 가 된다.
+    이래야 플랜트가 실행순서(항상 먼저)가 아니라 신호사슬 끝(맨 오른쪽)에 놓인다.
     """
     order = bd.compile()
-    rank = {b: i for i, b in enumerate(order)}
+    fwd = {b: set() for b in bd.blocks}          # 전체 와이어 그래프
+    for dst, src in bd.wires.items():
+        fwd[src.block].add(dst.block)
+
+    def reaches(a, b):                           # a 에서 b 로 갈 수 있는가
+        seen, stack = set(), [a]
+        while stack:
+            n = stack.pop()
+            if n is b:
+                return True
+            if n in seen:
+                continue
+            seen.add(n)
+            stack.extend(fwd[n])
+        return False
+
+    dag = {b: set() for b in bd.blocks}          # 피드백 제외 순방향 그래프
+    for dst, src in bd.wires.items():
+        s, d = src.block, dst.block
+        if not s.feedthrough and reaches(d, s):
+            continue                              # 피드백 — 층 계산에서 제외
+        dag[s].add(d)
+
     layer = {b: 0 for b in bd.blocks}
-    for b in order:
-        for i in range(b.n_in):
-            src = bd.wires[Port(b, i)].block
-            if rank[src] < rank[b]:
-                layer[b] = max(layer[b], layer[src] + 1)
+    for _ in range(len(bd.blocks)):              # 최장경로 (DAG 라 수렴)
+        changed = False
+        for s, dsts in dag.items():
+            for d in dsts:
+                if layer[d] < layer[s] + 1:
+                    layer[d] = layer[s] + 1
+                    changed = True
+        if not changed:
+            break
     cols = {}
     pos = {}
     for b in order:

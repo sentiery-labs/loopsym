@@ -6,9 +6,12 @@
 
 import math
 
+import pytest
+
 from loopsym import (
     Constant, Diagram, PID, Scope, Simulator, Step,
-    QuadPlant, RateController, AttitudeController, PositionController, QuadXMixer,
+    Mixer, QuadPlant, RateController, AttitudeController, PositionController,
+    QuadXMixer,
 )
 from loopsym.viz import export_json, load_json
 from loopsym.webapi import run_simulation
@@ -121,6 +124,40 @@ def test_position_move_north_and_climb():
     assert abs(n - 2.0) < 0.1 and abs(e) < 0.1 and abs(d + 6.0) < 0.1
     # 정착(마지막 0.5s 동안 이동 < 2cm)
     assert abs(sc.data[0][-1] - sc.data[0][-125]) < 0.02
+
+
+@pytest.mark.parametrize("frame", ["quad_x", "quad_plus", "hexa_x", "octo_x"])
+def test_frame_hover_recovery(frame):
+    """프레임별 플랜트+믹서 자기일관: 어느 기체든 같은 제어기로 레벨 복귀.
+
+    제어기는 정규화 wrench 만 내고 기체 차이는 Mixer 가 흡수 (PX4 구조).
+    """
+    bd = Diagram()
+    plant = bd.add(QuadPlant(frame=frame, roll0=10 * DEG, pitch0=-5 * DEG, z0=-5.0))
+    att = bd.add(AttitudeController())
+    rate = bd.add(RateController(st=DT))
+    mix = bd.add(Mixer(frame=frame))
+    zero = bd.add(Constant(0.0))
+    thr = bd.add(Constant(0.5))
+    n = plant.n_in
+    assert mix.n_out == n
+    for i in range(4):
+        bd.connect(plant[i], att[i])
+    for i in range(3):
+        bd.connect(zero, att[4 + i])
+        bd.connect(att[i], rate[i])
+        bd.connect(plant[4 + i], rate[3 + i])
+        bd.connect(rate[i], mix[i])
+    bd.connect(thr, mix[3])
+    for i in range(n):
+        bd.connect(mix[i], plant[i])
+    sc = bd.add(Scope(n_in=3, labels=["qw", "qx", "qy"]))
+    for i in range(3):
+        bd.connect(plant[i], sc[i])
+    Simulator(bd).run(4.0, DT)
+    qw, qx, qy = (ch[-1] for ch in sc.data)
+    assert all(math.isfinite(v) for ch in sc.data for v in ch)
+    assert abs(qx) < 0.005 and abs(qy) < 0.005 and qw > 0.9999   # 레벨 복귀
 
 
 def test_pid_block_step_tracking():

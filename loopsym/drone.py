@@ -117,35 +117,90 @@ def _clip(v, lo, hi):
 
 
 # ----------------------------------------------------------------------
-# Plant — 6-DoF 쿼드로터 (연속, RK4 로 적분됨)
+# 기체 프레임 기하 — PX4 airframe (CA_ROTORn_PX/PY/KM) 그대로.
+#   px/py: 로터 위치 (arm 단위 상대좌표, FRD), spin: 요 반작용 부호 = sign(KM)
+#   mixer: PX4 control_allocator 의사역행렬+정규화 결과 상수 (열: Mx My Mz Tz)
+#          — quad/hexa/octo X 는 px4_params.m 검증 상수와 일치 확인,
+#          quad_+ 는 같은 알고리즘(px4_compute_mixer 포팅)으로 생성.
+# ----------------------------------------------------------------------
+_FRAMES = {
+    "quad_x": {                                  # 4001_quad_x
+        "px": (1.0, -1.0, 1.0, -1.0),
+        "py": (1.0, -1.0, -1.0, 1.0),
+        "spin": (1.0, 1.0, -1.0, -1.0),
+        "mixer": ((-0.707107, 0.707107, 1.0, -1.0),
+                  (0.707107, -0.707107, 1.0, -1.0),
+                  (0.707107, 0.707107, -1.0, -1.0),
+                  (-0.707107, -0.707107, -1.0, -1.0)),
+    },
+    "quad_plus": {                               # 5001_quad_+
+        "px": (0.0, 0.0, 1.0, -1.0),
+        "py": (1.0, -1.0, 0.0, 0.0),
+        "spin": (1.0, 1.0, -1.0, -1.0),
+        "mixer": ((-0.707107, 0.0, 1.0, -1.0),
+                  (0.707107, 0.0, 1.0, -1.0),
+                  (0.0, 0.707107, -1.0, -1.0),
+                  (0.0, -0.707107, -1.0, -1.0)),
+    },
+    "hexa_x": {                                  # 6001_hexa_x
+        "px": (0.0, 0.0, 0.43, -0.43, 0.43, -0.43),
+        "py": (0.5, -0.5, -0.25, 0.25, 0.25, -0.25),
+        "spin": (-1.0, 1.0, -1.0, 1.0, 1.0, -1.0),
+        "mixer": ((-0.810816, 0.0, -1.0, -1.0),
+                  (0.810816, 0.0, 1.0, -1.0),
+                  (0.405408, 0.707107, -1.0, -1.0),
+                  (-0.405408, -0.707107, 1.0, -1.0),
+                  (-0.405408, 0.707107, 1.0, -1.0),
+                  (0.405408, -0.707107, -1.0, -1.0)),
+    },
+    "octo_x": {                                  # 8001_octo_x
+        "px": (0.46, -0.46, 0.19, -0.46, 0.46, -0.19, 0.19, -0.19),
+        "py": (0.19, -0.19, 0.46, 0.19, -0.19, -0.46, -0.46, 0.46),
+        "spin": (-1.0, -1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0),
+        "mixer": ((-0.381760, 0.924261, -1.0, -1.0),
+                  (0.381760, -0.924261, -1.0, -1.0),
+                  (-0.924261, 0.381760, 1.0, -1.0),
+                  (-0.381760, -0.924261, 1.0, -1.0),
+                  (0.381760, 0.924261, 1.0, -1.0),
+                  (0.924261, -0.381760, 1.0, -1.0),
+                  (0.924261, 0.381760, -1.0, -1.0),
+                  (-0.924261, -0.381760, -1.0, -1.0)),
+    },
+}
+
+
+# ----------------------------------------------------------------------
+# Plant — 6-DoF 멀티로터 (연속, RK4 로 적분됨)
 # ----------------------------------------------------------------------
 class QuadPlant(Block):
-    """quad-X 6-DoF 플랜트. 입력 모터 4 [0..1] -> 상태 13.
+    """6-DoF 멀티로터 플랜트. 입력 모터 N [0..1] -> 상태 13.
 
+    frame ∈ quad_x | quad_plus | hexa_x | octo_x (PX4 airframe 기하) —
+    같은 frame 의 Mixer 와 자기일관(폐루프 안정의 핵심). 포트 수는 프레임의
+    로터 수(4/4/6/8)를 따르고 출력 13개는 불변.
     출력: [qw qx qy qz | p q r | pN pE pD | vN vE vD]  (0..12)
     파라미터 기본값 = mc/quad_plant_params.m (호버 = 모터 0.5).
-    로터 배치/부호는 QuadXMixer 와 자기일관 (px4_compute_mixer 의 quad-X).
     """
 
-    n_in = 4
     n_out = 13
     state_size = 13
     feedthrough = False
 
-    # 모터 순서: 1 전우(+CCW) 2 후좌(+CCW) 3 전좌(-CW) 4 후우(-CW)
-    _PX = (1.0, -1.0, 1.0, -1.0)
-    _PY = (1.0, -1.0, -1.0, 1.0)
-    _SPIN = (1.0, 1.0, -1.0, -1.0)
-
     def __init__(self, m=1.0, g=9.81, ixx=0.02, iyy=0.02, izz=0.04,
                  arm=0.25, c_m=0.06, roll0=0.0, pitch0=0.0, yaw0=0.0,
-                 z0=0.0, name=None):
+                 z0=0.0, frame="quad_x", name=None):
         super().__init__(name)
+        if frame not in _FRAMES:
+            raise ValueError(f"frame 은 {tuple(_FRAMES)} 중 하나: {frame!r}")
+        geo = _FRAMES[frame]
+        self.frame = frame
+        self._px, self._py, self._spin = geo["px"], geo["py"], geo["spin"]
+        self.n_in = len(self._px)                 # 로터 수 = 입력 포트 수
         self.m, self.g = m, g
         self.ixx, self.iyy, self.izz = ixx, iyy, izz
         self.inertia = (ixx, iyy, izz)
         self.arm, self.c_m = arm, c_m
-        self.kF = m * g / 2.0                     # 호버 시 모터당 u=0.5
+        self.kF = 2.0 * m * g / self.n_in         # 호버 시 모터당 u=0.5
         self.roll0, self.pitch0, self.yaw0, self.z0 = roll0, pitch0, yaw0, z0
 
     def initial(self):
@@ -161,9 +216,9 @@ class QuadPlant(Block):
         vel = x[10:13]
         f = [self.kF * _clip(ui, 0.0, 1.0) for ui in u]      # 모터 추력 [N]
         thrust = sum(f)
-        tau = [sum(-self.arm * py * fi for py, fi in zip(self._PY, f)),
-               sum(self.arm * px * fi for px, fi in zip(self._PX, f)),
-               sum(self.c_m * s * fi for s, fi in zip(self._SPIN, f))]
+        tau = [sum(-self.arm * py * fi for py, fi in zip(self._py, f)),
+               sum(self.arm * px * fi for px, fi in zip(self._px, f)),
+               sum(self.c_m * s * fi for s, fi in zip(self._spin, f))]
 
         qw, qx, qy, qz = q
         # R(q) 3번째 열에 body 추력 [0,0,-T/m] 을 곱한 것 = 추력의 NED 가속
@@ -507,22 +562,33 @@ class AccelToAttitude(Block):
 # ----------------------------------------------------------------------
 # Allocation
 # ----------------------------------------------------------------------
-class QuadXMixer(Block):
-    """PX4 제어할당 quad-X (4001_quad_x) — control_allocator 의사역행렬+정규화 상수.
+class Mixer(Block):
+    """PX4 제어할당 — control_allocator 의사역행렬+정규화 상수 (프레임 선택형).
 
+    frame ∈ quad_x | quad_plus | hexa_x | octo_x. 입력은 프레임과 무관하게
+    정규화 wrench 4개 — 기체 차이를 할당이 흡수한다 (PX4 구조 그대로).
     입력: 토크 tx/ty/tz [0..2], collective 추력 [3] (위 방향 양수 [0..1])
-    출력: 모터 m1..m4 [0..1]
+    출력: 모터 m1..mN [0..1]  (N = 프레임 로터 수)
     """
 
     n_in = 4
-    n_out = 4
 
-    _MIXER = ((-0.707107, 0.707107, 1.0, -1.0),
-              (0.707107, -0.707107, 1.0, -1.0),
-              (0.707107, 0.707107, -1.0, -1.0),
-              (-0.707107, -0.707107, -1.0, -1.0))   # 열: Mx My Mz Tz
+    def __init__(self, frame="quad_x", name=None):
+        super().__init__(name)
+        if frame not in _FRAMES:
+            raise ValueError(f"frame 은 {tuple(_FRAMES)} 중 하나: {frame!r}")
+        self.frame = frame
+        self._mixer = _FRAMES[frame]["mixer"]      # 열: Mx My Mz Tz
+        self.n_out = len(self._mixer)
 
     def output(self, t, u, x):
         ctrl = (u[0], u[1], u[2], -u[3])            # thrust_sp_z = -thrust (z아래 +)
         return tuple(_clip(sum(m * c for m, c in zip(row, ctrl)), 0.0, 1.0)
-                     for row in self._MIXER)
+                     for row in self._mixer)
+
+
+class QuadXMixer(Mixer):
+    """Mixer(frame='quad_x') 의 구명 별칭 — 기존 다이어그램/JSON 호환용."""
+
+    def __init__(self, name=None):
+        super().__init__("quad_x", name)

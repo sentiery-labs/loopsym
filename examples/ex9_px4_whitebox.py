@@ -15,7 +15,12 @@ ex7 은 검증된 제어기 블록(한 덩어리)을 썼다. 이 예제는 같�
   PX4_RateControl
     └─ Rate_Roll/Pitch/Yaw   PID + anti-windup(ifac) + D항 필터링 미분
                              (yaw 는 D=0 + 토크 LPF 2Hz)
-  QuadXMixer, QuadPlant  (할당/플랜트는 검증 블록 그대로)
+  Mixer(quad_x)
+  QuadPlant_6DoF        ← 플랜트도 화이트박스: 모터→힘/모멘트→강체 흐름
+    ├─ Motor_Dynamics   모터 명령 [0..1] → 포화 → kF → 로터 추력 [N]
+    ├─ Forces_Moments   로터 추력 → 동체 토크(3) + 총추력  (quad-X 기하)
+    └─ Body_Dynamics    6-DoF 강체: 13-상태 미분(쿼터니언/오일러 방정식)
+                        + 적분기 13개 (RK4 가 적분)
 
 실행:  python examples/ex9_px4_whitebox.py
   → ex7 모놀리식 제어기와 **동일 궤적**임을 확인(교차 검증) + ex9_diagram.html
@@ -26,9 +31,9 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from loopsym import (
-    Constant, Diagram, Gain, Inport, Outport, PyFunction, Saturation, Scope,
-    Simulator, Step, Subsystem, Sum, UnitDelay, render_html,
-    QuadPlant, QuadXMixer, EulerToQuat, QuatAttitudeError, AccelToAttitude,
+    Constant, Diagram, Gain, Inport, Integrator, Outport, PyFunction, Saturation,
+    Scope, Simulator, Step, Subsystem, Sum, UnitDelay, render_html,
+    Mixer, QuadPlant, EulerToQuat, QuatAttitudeError, AccelToAttitude,
 )
 
 DT = 0.004
@@ -223,15 +228,95 @@ def build_position_control():
     return d
 
 
+# ------------------------------------------------------------ Plant 화이트박스
+# 검증본 QuadPlant(quad_x 기본값: m=1, I=(.02,.02,.04), arm=.25, cM=.06)와
+# 같은 방정식을 블록 흐름으로 편 것 — 모터 → 힘/모멘트 → 강체 6-DoF.
+def build_motor_dynamics(k_f):
+    """모터 명령 [0..1] → 포화 → 추력상수 kF → 로터 추력 [N]."""
+    d = Diagram()
+    for i in range(4):
+        cmd = d.add(Inport(i, name=f"cmd{i + 1}"))
+        sat = d.add(Saturation(lo=0.0, hi=1.0, name=f"sat{i + 1}"))
+        kf = d.add(Gain(k=k_f, name=f"kF{i + 1}"))
+        o = d.add(Outport(i, name=f"f{i + 1}"))
+        d.connect(cmd, sat); d.connect(sat, kf); d.connect(kf, o)
+    return d
+
+
+def build_body_dynamics(z0):
+    """토크(3)+총추력 → 13-상태 6-DoF 미분(PyFunction) → 적분기 13개."""
+    d = Diagram()
+    ins = [d.add(Inport(i, name=n)) for i, n in enumerate(["tau_x", "tau_y", "tau_z", "T"])]
+    # 미분: u0..u12 = 상태(qw qx qy qz | p q r | pN pE pD | vN vE vD), u13..u16 = 입력
+    dyn = d.add(PyFunction("\n".join([
+        "# 6-DoF 강체 (m=1, Ixx=Iyy=0.02, Izz=0.04, g=9.81)",
+        "qw = u0; qx = u1; qy = u2; qz = u3",
+        "p = u4; q = u5; r = u6",
+        "# 쿼터니언 운동학 + 정규화 보정 (Baumgarte)",
+        "c = 0.5 * (1.0 - (qw*qw + qx*qx + qy*qy + qz*qz))",
+        "y0 = 0.5*(-qx*p - qy*q - qz*r) + c*qw",
+        "y1 = 0.5*( qw*p + qy*r - qz*q) + c*qx",
+        "y2 = 0.5*( qw*q - qx*r + qz*p) + c*qy",
+        "y3 = 0.5*( qw*r + qx*q - qy*p) + c*qz",
+        "# 오일러 방정식 (대각 관성)",
+        "y4 = (u13 - (q*0.04*r - r*0.02*q)) / 0.02",
+        "y5 = (u14 - (r*0.02*p - p*0.04*r)) / 0.02",
+        "y6 = (u15 - (p*0.02*q - q*0.02*p)) / 0.04",
+        "# 위치 미분 = 속도",
+        "y7 = u10; y8 = u11; y9 = u12",
+        "# 병진: 중력 + 추력(동체 -z 를 NED 로 회전)",
+        "az = -u16 / 1.0",
+        "y10 = 2*(qx*qz + qw*qy) * az",
+        "y11 = 2*(qy*qz - qw*qx) * az",
+        "y12 = 9.81 + (qw*qw - qx*qx - qy*qy + qz*qz) * az",
+    ]), n_in=17, n_out=13, name="deriv_6dof"))
+    x0 = [1.0] + [0.0] * 8 + [z0] + [0.0] * 3          # qw=1, pD=z0
+    names = ["qw", "qx", "qy", "qz", "p", "q", "r",
+             "pN", "pE", "pD", "vN", "vE", "vD"]
+    for i in range(13):
+        it = d.add(Integrator(x0=x0[i], name=f"int_{names[i]}"))
+        o = d.add(Outport(i, name=names[i]))
+        d.connect(dyn[i], it); d.connect(it, o)
+        d.connect(it, dyn[i])                           # 상태 피드백
+    for i in range(4):
+        d.connect(ins[i], dyn[13 + i])
+    return d
+
+
+def build_plant_whitebox(z0=0.0):
+    """QuadPlant(quad_x) 화이트박스 — in: 모터 4 / out: 상태 13."""
+    d = Diagram()
+    ins = [d.add(Inport(i, name=f"m{i + 1}")) for i in range(4)]
+    motors = d.add(Subsystem(build_motor_dynamics(k_f=1.0 * 9.81 / 2.0),
+                             name="Motor_Dynamics"))
+    # quad-X 기하: Mx=-arm·Σpy·f, My=arm·Σpx·f, Mz=cM·Σspin·f
+    fm = d.add(PyFunction("\n".join([
+        "# quad-X: px=(1,-1,1,-1) py=(1,-1,-1,1) spin=(1,1,-1,-1), arm=0.25, cM=0.06",
+        "y0 = -0.25 * (u0 - u1 - u2 + u3)",
+        "y1 =  0.25 * (u0 - u1 + u2 - u3)",
+        "y2 =  0.06 * (u0 + u1 - u2 - u3)",
+        "y3 = u0 + u1 + u2 + u3",
+    ]), n_in=4, n_out=4, name="Forces_Moments"))
+    body = d.add(Subsystem(build_body_dynamics(z0), name="Body_Dynamics"))
+    for i in range(4):
+        d.connect(ins[i], motors[i])
+        d.connect(motors[i], fm[i])
+        d.connect(fm[i], body[i])
+    for i in range(13):
+        o = d.add(Outport(i, name=f"x{i}"))
+        d.connect(body[i], o)
+    return d
+
+
 # ------------------------------------------------------------------ 최상위 조립
 def build(scenario="pos"):
     """ex7 과 같은 시나리오의 화이트박스 판."""
     bd = Diagram()
-    plant = bd.add(QuadPlant(z0=-5.0, name="quad"))
     pos = bd.add(Subsystem(build_position_control(), name="PX4_PositionControl"))
     att = bd.add(Subsystem(build_attitude_control(), name="PX4_AttitudeControl"))
     rate = bd.add(Subsystem(build_rate_control(), name="PX4_RateControl"))
-    mix = bd.add(QuadXMixer(name="mixer"))
+    mix = bd.add(Mixer(frame="quad_x", name="mixer"))
+    plant = bd.add(Subsystem(build_plant_whitebox(z0=-5.0), name="QuadPlant_6DoF"))
 
     n_sp = bd.add(Step(t_on=0.5, height=2.0, name="north_sp"))
     e_sp = bd.add(Constant(0.0, name="east_sp"))

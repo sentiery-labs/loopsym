@@ -386,6 +386,7 @@ const BLOCKSIM_SRC = /*__BLOCKSIM_SRC__*/null;
 
 /* ---------------- 블록 메타데이터 (팔레트/포트 수/기본값 — blocks.py 와 대응) ---------------- */
 const countIO = (b, type) => b.inner ? b.inner.blocks.filter(x => x.type === type).length : 0;
+const FRAME_N = { quad_x: 4, quad_plus: 4, hexa_x: 6, octo_x: 8 };   // 프레임별 로터 수
 const LIB = {
   Constant: { cat: "source", tag: "const", nIn: () => 0, nOut: () => 1,
     defaults: { value: 1.0 }, summary: () => "" },
@@ -434,10 +435,10 @@ const LIB = {
     defaults: { topic: "/turtle1/cmd_vel", msg_type: "geometry_msgs/msg/Twist", fields: ["linear.x", "angular.z"] },
     summary: p => String(p.topic) },
   // 드론 팔레트 (loopsym.drone, PX4 v1.16 — CLD-P65)
-  QuadPlant: { cat: "plant", tag: "6-DoF", nIn: () => 4, nOut: () => 13,
-    defaults: { m: 1.0, g: 9.81, ixx: 0.02, iyy: 0.02, izz: 0.04, arm: 0.25, c_m: 0.06,
-                roll0: 0.0, pitch0: 0.0, yaw0: 0.0, z0: 0.0 },
-    summary: p => `m=${p.m}kg` },
+  QuadPlant: { cat: "plant", tag: "6-DoF", nIn: p => FRAME_N[p.frame] || 4, nOut: () => 13,
+    defaults: { frame: "quad_x", m: 1.0, g: 9.81, ixx: 0.02, iyy: 0.02, izz: 0.04,
+                arm: 0.25, c_m: 0.06, roll0: 0.0, pitch0: 0.0, yaw0: 0.0, z0: 0.0 },
+    summary: p => `${p.frame} · m=${p.m}kg` },
   PID: { cat: "control", tag: "pid", nIn: () => 1, nOut: () => 1,
     defaults: { kp: 1.0, ki: 0.0, kd: 0.0, st: 0.01, lim: 0.0 },
     summary: p => `P${p.kp} I${p.ki} D${p.kd}` },
@@ -447,8 +448,11 @@ const LIB = {
     defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
   PositionController: { cat: "control", tag: "pos", nIn: () => 10, nOut: () => 4,
     defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
+  Mixer: { cat: "allocation", tag: "mix", nIn: () => 4, nOut: p => FRAME_N[p.frame] || 4,
+    defaults: { frame: "quad_x" },
+    summary: p => String(p.frame) },
   QuadXMixer: { cat: "allocation", tag: "mix", nIn: () => 4, nOut: () => 4,
-    defaults: {}, summary: () => "quad-X" },
+    defaults: {}, summary: () => "quad-X", hidden: true },   // 구명 별칭 (JSON 호환)
   // 화이트박스 조립용 좌표변환 (ex9 — 캐스케이드는 기본 블록으로 조립)
   EulerToQuat: { cat: "control", tag: "eul→q", nIn: () => 3, nOut: () => 4,
     defaults: {}, summary: () => "" },
@@ -1152,17 +1156,18 @@ function ungroup(sub) {
 /* ---------------- 팔레트 ---------------- */
 const palette = document.getElementById("bsPalette");
 {
-  // ARCHITECTURE.md §1 확정 카테고리 순서 (왼→오 = 신호 흐름 순). 빈 카테고리도 표시.
+  // ARCHITECTURE.md §1 카테고리 순서 (왼→오 = 신호 흐름 순, 7/18 개정:
+  // Plant 는 사슬의 끝 — 센서→추정→항법→제어→할당→플랜트). 빈 카테고리도 표시.
   const groups = [
     { title: "Sources/Sinks", cats: ["source", "sink"] },
     { title: "Math", cats: ["math"] },
     { title: "Continuous/Discrete", cats: ["state", "discrete"] },
-    { title: "Plant", cats: ["plant"] },
     { title: "Sensors", cats: ["sensors"] },
     { title: "Estimation", cats: ["estimation"] },
     { title: "Navigation", cats: ["navigation"] },
     { title: "Control", cats: ["control"] },
     { title: "Allocation", cats: ["allocation"] },
+    { title: "Plant", cats: ["plant"] },
     { title: "Interfaces", cats: ["ros2", "interfaces"] },
     { title: "Subsystem", cats: ["sub"] },
   ];
@@ -1172,7 +1177,7 @@ const palette = document.getElementById("bsPalette");
     palette.appendChild(h);
     let n = 0;
     for (const type in LIB) {
-      if (!g.cats.includes(LIB[type].cat)) continue;
+      if (!g.cats.includes(LIB[type].cat) || LIB[type].hidden) continue;
       const btn = document.createElement("button");
       btn.className = "pal-item"; btn.innerHTML = `+ ${type} <small>${LIB[type].tag}</small>`;
       btn.style.setProperty("--cat", TAG_COLOR[LIB[type].cat] || "var(--line)");
