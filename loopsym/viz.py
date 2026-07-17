@@ -34,6 +34,14 @@ _PARAMS = {
     "Demux": ["n_out"],
     "Ros2Subscribe": ["topic", "msg_type", "fields", "st", "defaults"],
     "Ros2Publish": ["topic", "msg_type", "fields"],
+    # 드론 팔레트 (drone.py, CLD-P65)
+    "QuadPlant": ["m", "g", "ixx", "iyy", "izz", "arm", "c_m",
+                  "roll0", "pitch0", "yaw0", "z0"],
+    "PID": ["kp", "ki", "kd", "st", "lim"],
+    "AttitudeController": ["roll_p", "pitch_p", "yaw_p", "yaw_w"],
+    "RateController": ["st"],
+    "PositionController": ["st"],
+    "QuadXMixer": [],
 }
 
 
@@ -135,6 +143,12 @@ def load_json(src):
                     from . import ros2 as _ros2
                     cls = getattr(_ros2, cls_name, None)
                 if cls is None:
+                    from . import drone as _drone
+                    from .core import Block as _Block
+                    cls = getattr(_drone, cls_name, None)
+                    if not (isinstance(cls, type) and issubclass(cls, _Block)):
+                        cls = None
+                if cls is None:
                     raise ValueError(f"알 수 없는 블록 타입: {cls_name}")
                 if cls_name == "PyFunction" and params.get("expr") is None:
                     raise ValueError(
@@ -156,7 +170,7 @@ def load_json(src):
 # 뷰어에 심는 엔진 소스 — 뷰어의 Pyodide 가 이 파일들을 그대로 임포트해서 돌린다.
 # (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
 _ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py",
-                 "realtime.py", "ros2.py"]
+                 "realtime.py", "ros2.py", "drone.py"]
 
 
 def _engine_sources():

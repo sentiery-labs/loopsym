@@ -107,7 +107,11 @@ class Simulator:
         for b in self.order:
             if b.feedthrough:
                 u = tuple(signals[self.bd.wires[Port(b, i)]] for i in range(b.n_in))
-                y = b.output(t, u, self._block_state(b, x))
+                # 이산 블록이면 x 자리에 이산상태 — 위의 non-feedthrough 분기와 같은 규약.
+                # ponytail: RK4 minor step 에서도 u 로 재계산됨 (엄밀한 ZOH 아님).
+                # 단일레이트(st==dt)에선 차이 미미; 멀티레이트 정밀 ZOH 필요 시 출력 캐시 추가.
+                xs = self.xd[b] if b.dstate_size else self._block_state(b, x)
+                y = b.output(t, u, xs)
                 for i, v in enumerate(y):
                     signals[Port(b, i)] = v
         # 모든 신호가 정해진 뒤에야 각 블록의 입력 튜플을 만들 수 있다

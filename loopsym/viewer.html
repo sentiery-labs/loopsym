@@ -401,8 +401,25 @@ const LIB = {
   Ros2Publish: { cat: "ros2", tag: "ros2 pub", nIn: b => (b.params.fields || []).length, nOut: () => 0,
     defaults: { topic: "/turtle1/cmd_vel", msg_type: "geometry_msgs/msg/Twist", fields: ["linear.x", "angular.z"] },
     summary: p => String(p.topic) },
+  // 드론 팔레트 (loopsym.drone, PX4 v1.16 — CLD-P65)
+  QuadPlant: { cat: "plant", tag: "6-DoF", nIn: () => 4, nOut: () => 13,
+    defaults: { m: 1.0, g: 9.81, ixx: 0.02, iyy: 0.02, izz: 0.04, arm: 0.25, c_m: 0.06,
+                roll0: 0.0, pitch0: 0.0, yaw0: 0.0, z0: 0.0 },
+    summary: p => `m=${p.m}kg` },
+  PID: { cat: "control", tag: "pid", nIn: () => 1, nOut: () => 1,
+    defaults: { kp: 1.0, ki: 0.0, kd: 0.0, st: 0.01, lim: 0.0 },
+    summary: p => `P${p.kp} I${p.ki} D${p.kd}` },
+  AttitudeController: { cat: "control", tag: "att P", nIn: () => 7, nOut: () => 3,
+    defaults: { roll_p: 6.5, pitch_p: 6.5, yaw_p: 2.8, yaw_w: 0.4 }, summary: () => "PX4 v1.16" },
+  RateController: { cat: "control", tag: "rate PID", nIn: () => 6, nOut: () => 3,
+    defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
+  PositionController: { cat: "control", tag: "pos", nIn: () => 10, nOut: () => 4,
+    defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
+  QuadXMixer: { cat: "allocation", tag: "mix", nIn: () => 4, nOut: () => 4,
+    defaults: {}, summary: () => "quad-X" },
 };
-const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)" };
+const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
+                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();
