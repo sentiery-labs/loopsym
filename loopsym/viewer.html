@@ -417,9 +417,14 @@ const LIB = {
     defaults: { st: 0.004 }, summary: p => `Ts=${p.st}` },
   QuadXMixer: { cat: "allocation", tag: "mix", nIn: () => 4, nOut: () => 4,
     defaults: {}, summary: () => "quad-X" },
+  // 센서 팔레트 (loopsym.sensors — CLD-P62, fidelity 규약: 포트 불변)
+  IMU: { cat: "sensors", tag: "imu", nIn: () => 10, nOut: () => 6,
+    defaults: { fidelity: "ideal", gyro_bias: 0.0, gyro_nd: 5e-5,
+                accel_bias: 0.0, accel_nd: 7e-4, g: 9.81, seed: 0, st: 0.004 },
+    summary: p => String(p.fidelity) },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
-                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)" };
+                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();

@@ -19,3 +19,4 @@ from .drone import (                           # 드론 팔레트 (CLD-P65)
     QuadPlant, PID, RateController, AttitudeController, PositionController,
     QuadXMixer,
 )
+from .sensors import SensorBlock, IMU          # 센서 팔레트 (CLD-P62)
