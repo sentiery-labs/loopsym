@@ -24,6 +24,15 @@ WEEKS = {
     "week05": {"mydiagram.py": "week05_mydiagram.py"},
     "week06": {"myblocks.py": "week06_myblocks.py", "mysim.py": "week06_mysim.py"},
     "week07": {"mymodel.py": "week07_mymodel.py"},
+    # 후반부(8~15주차): 모델 JSON 제출 방식 — 뼈대/정답 정본은 tools/gen_week_models.py
+    "week08": {"week08_model.json": "week08_model.json"},
+    "week09": {"week09_model.json": "week09_model.json"},
+    "week10": {"week10_model.json": "week10_model.json"},
+    "week11": {"week11_model.json": "week11_model.json"},
+    "week12": {"week12_model.json": "week12_model.json"},
+    "week13": {"week13_model.json": "week13_model.json"},
+    "week14": {"week14_model.json": "week14_model.json"},
+    "week15": {"week15_model.json": "week15_model.json"},
 }
 
 

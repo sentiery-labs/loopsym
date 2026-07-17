@@ -505,9 +505,14 @@ const LIB = {
     pin: ["gx", "gy", "gz", "ax", "ay", "az"],
     pout: ["qw", "qx", "qy", "qz", "p", "q", "r"],
     summary: p => `Kp${p.kp} Ki${p.ki}` },
+  // 항법 팔레트 (loopsym.navigation)
+  WaypointManager: { cat: "navigation", tag: "wp", nIn: () => 3, nOut: () => 4,
+    defaults: { waypoints: "2,0,-6; 2,2,-6; 0,0,-5", radius: 0.5, st: 0.004 },
+    pin: ["pN", "pE", "pD"], pout: ["n_sp", "e_sp", "d_sp", "wp_idx"],
+    summary: p => `${String(p.waypoints).split(";").filter(s => s.trim()).length} wp` },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
-                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)" };
+                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)", navigation: "var(--tag-sub)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();

@@ -51,6 +51,8 @@ _PARAMS = {
             "g", "seed", "st"],
     # 상태추정 팔레트 (estimation.py, CLD-P64)
     "ComplementaryFilter": ["kp", "ki", "st"],
+    # 항법 팔레트 (navigation.py)
+    "WaypointManager": ["waypoints", "radius", "st"],
 }
 
 
@@ -63,7 +65,10 @@ def _auto_layout(bd):
     상태블록을 지나므로(대수루프 검사 보장) 이것만 빼면 DAG 가 된다.
     이래야 플랜트가 실행순서(항상 먼저)가 아니라 신호사슬 끝(맨 오른쪽)에 놓인다.
     """
-    order = bd.compile()
+    try:
+        order = bd.compile()
+    except Exception:            # 미완성(미연결) 다이어그램도 배치는 돼야 한다
+        order = list(bd.blocks)
     fwd = {b: set() for b in bd.blocks}          # 전체 와이어 그래프
     for dst, src in bd.wires.items():
         fwd[src.block].add(dst.block)
@@ -184,10 +189,12 @@ def load_json(src):
                     from . import drone as _drone
                     from . import sensors as _sensors
                     from . import estimation as _estimation
+                    from . import navigation as _navigation
                     from .core import Block as _Block
                     cls = (getattr(_drone, cls_name, None)
                            or getattr(_sensors, cls_name, None)
-                           or getattr(_estimation, cls_name, None))
+                           or getattr(_estimation, cls_name, None)
+                           or getattr(_navigation, cls_name, None))
                     if not (isinstance(cls, type) and issubclass(cls, _Block)):
                         cls = None
                 if cls is None:
@@ -212,7 +219,8 @@ def load_json(src):
 # 뷰어에 심는 엔진 소스 — 뷰어의 Pyodide 가 이 파일들을 그대로 임포트해서 돌린다.
 # (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
 _ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py",
-                 "realtime.py", "ros2.py", "drone.py", "sensors.py", "estimation.py"]
+                 "realtime.py", "ros2.py", "drone.py", "sensors.py", "estimation.py",
+                 "navigation.py"]
 
 
 def _engine_sources():

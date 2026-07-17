@@ -1,0 +1,248 @@
+{
+ "blocks": [
+  {
+   "id": 0,
+   "type": "QuadPlant",
+   "name": "quad",
+   "n_in": 4,
+   "n_out": 13,
+   "params": {
+    "frame": "quad_x",
+    "m": 1.0,
+    "g": 9.81,
+    "ixx": 0.02,
+    "iyy": 0.02,
+    "izz": 0.04,
+    "arm": 0.25,
+    "c_m": 0.06,
+    "roll0": 0.0,
+    "pitch0": 0.0,
+    "yaw0": 0.0,
+    "z0": -5.0
+   },
+   "x": 630,
+   "y": 60
+  },
+  {
+   "id": 1,
+   "type": "RateController",
+   "name": "rate_ctrl",
+   "n_in": 6,
+   "n_out": 3,
+   "params": {
+    "st": 0.004
+   },
+   "x": 250,
+   "y": 60
+  },
+  {
+   "id": 2,
+   "type": "Mixer",
+   "name": "mixer",
+   "n_in": 4,
+   "n_out": 4,
+   "params": {
+    "frame": "quad_x"
+   },
+   "x": 440,
+   "y": 60
+  },
+  {
+   "id": 3,
+   "type": "Constant",
+   "name": "p_sp",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "value": 0.0
+   },
+   "x": 60,
+   "y": 60
+  },
+  {
+   "id": 4,
+   "type": "Constant",
+   "name": "q_sp",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "value": 0.0
+   },
+   "x": 60,
+   "y": 180
+  },
+  {
+   "id": 5,
+   "type": "Step",
+   "name": "r_sp",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "t_on": 1.0,
+    "height": 0.5
+   },
+   "x": 60,
+   "y": 300
+  },
+  {
+   "id": 6,
+   "type": "Constant",
+   "name": "hover_thr",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "value": 0.5
+   },
+   "x": 60,
+   "y": 420
+  },
+  {
+   "id": 7,
+   "type": "Scope",
+   "name": "★scope_rate",
+   "n_in": 2,
+   "n_out": 0,
+   "params": {
+    "n_in": 2,
+    "labels": [
+     "r_sp",
+     "r"
+    ]
+   },
+   "x": 820,
+   "y": 60
+  }
+ ],
+ "wires": [
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    1,
+    0
+   ]
+  },
+  {
+   "src": [
+    4,
+    0
+   ],
+   "dst": [
+    1,
+    1
+   ]
+  },
+  {
+   "src": [
+    5,
+    0
+   ],
+   "dst": [
+    1,
+    2
+   ]
+  },
+  {
+   "src": [
+    1,
+    0
+   ],
+   "dst": [
+    2,
+    0
+   ]
+  },
+  {
+   "src": [
+    1,
+    1
+   ],
+   "dst": [
+    2,
+    1
+   ]
+  },
+  {
+   "src": [
+    1,
+    2
+   ],
+   "dst": [
+    2,
+    2
+   ]
+  },
+  {
+   "src": [
+    6,
+    0
+   ],
+   "dst": [
+    2,
+    3
+   ]
+  },
+  {
+   "src": [
+    2,
+    0
+   ],
+   "dst": [
+    0,
+    0
+   ]
+  },
+  {
+   "src": [
+    2,
+    1
+   ],
+   "dst": [
+    0,
+    1
+   ]
+  },
+  {
+   "src": [
+    2,
+    2
+   ],
+   "dst": [
+    0,
+    2
+   ]
+  },
+  {
+   "src": [
+    2,
+    3
+   ],
+   "dst": [
+    0,
+    3
+   ]
+  },
+  {
+   "src": [
+    5,
+    0
+   ],
+   "dst": [
+    7,
+    0
+   ]
+  },
+  {
+   "src": [
+    0,
+    6
+   ],
+   "dst": [
+    7,
+    1
+   ]
+  }
+ ]
+}
