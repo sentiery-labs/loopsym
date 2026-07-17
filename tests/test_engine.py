@@ -1,6 +1,6 @@
 """loopsym 파이썬 엔진 회귀 테스트 — WORKPLAN §6 기준값의 진실.
 
-실행: pyblocks/ 에서  python3 -m pytest tests/ -q
+실행: loopsym/ 저장소 루트에서  python3 -m pytest tests/ -q
 """
 
 import json

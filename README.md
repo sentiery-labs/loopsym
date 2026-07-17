@@ -33,7 +33,7 @@ License: Apache-2.0 · Copyright 2026 Sentiery
 ## 빠른 시작
 
 ```bash
-cd pyblocks
+cd loopsym
 python3 examples/ex1_pi_closed_loop.py   # ex1_result.png + ex1_diagram.html 생성
 ```
 
