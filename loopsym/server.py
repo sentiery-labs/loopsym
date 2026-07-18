@@ -12,6 +12,8 @@ Pyodide 모드로 자동 폴백한다. HILS(실제 Pixhawk)와 실시간 러너(
   client→server: {"cmd": "run", "diagram": {...}, "t_end": 10, "dt": 0.004,
                   "mode": "sim" | "realtime"}          # 기본 "sim"
   client→server: {"cmd": "stop"}
+  client→server: {"cmd": "joy", "axes": [...], "buttons": [0/1,...]}
+                  # 게임패드 라이브 입력 — 실행 중 Joystick 블록으로 라우팅
   server→client: {"type": "progress", "t": 3.2,
                   "signals_chunk": {"time": [...], "signals": {...}, "labels": {...}}}
   server→client: {"type": "done", "stats": {"steps": N, "elapsed_s": s, "stopped": bool,
@@ -65,7 +67,7 @@ def _put_drop_oldest(q, item):
                 pass
 
 
-def _sim_worker(model, t_end, dt, mode, out_q, stop_evt):
+def _sim_worker(model, t_end, dt, mode, out_q, stop_evt, joy_state=None):
     """전용 스레드: 시뮬레이션을 돌리며 Scope 증분을 청크로 내보낸다."""
     try:
         if not (t_end > 0 and dt > 0):
@@ -78,6 +80,13 @@ def _sim_worker(model, t_end, dt, mode, out_q, stop_evt):
         scopes = _scope_paths(bd)
         labels = {disp: list(s.labels) for disp, s in scopes}
         sim = Simulator(bd)
+
+        # 게임패드 라이브 입력 → Joystick 블록 연결 (ws 핸들러가 dict 를 갱신)
+        if joy_state is not None:
+            from .joystick import Joystick
+            for b in sim.bd.blocks:
+                if isinstance(b, Joystick):
+                    b.attach(joy_state)
 
         sent = 0                       # 이미 보낸 샘플 수 (Scope 는 전부 같은 major step 에 기록)
         t0 = time.monotonic()
@@ -147,6 +156,7 @@ async def _handle(ws):
     await ws.accept()
     stop_evt = None
     pump_task = None
+    joy_state = None
     try:
         while True:
             msg = json.loads(await ws.receive_text())
@@ -158,12 +168,17 @@ async def _handle(ws):
                     continue
                 out_q = queue.Queue(maxsize=QUEUE_SIZE)
                 stop_evt = threading.Event()
+                joy_state = {}
                 threading.Thread(
                     target=_sim_worker,
                     args=(msg["diagram"], float(msg["t_end"]), float(msg["dt"]),
-                          msg.get("mode", "sim"), out_q, stop_evt),
+                          msg.get("mode", "sim"), out_q, stop_evt, joy_state),
                     daemon=True).start()
                 pump_task = asyncio.ensure_future(_pump(ws, out_q))
+            elif cmd == "joy":
+                if joy_state is not None:      # 갱신만 — 물리 루프는 안 기다린다
+                    joy_state["axes"] = msg.get("axes") or []
+                    joy_state["buttons"] = msg.get("buttons") or []
             elif cmd == "stop":
                 if stop_evt:
                     stop_evt.set()

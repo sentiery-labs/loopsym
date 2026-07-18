@@ -6,6 +6,9 @@
   (미설치 소스 트리/Pyodide 에서는 `"unknown"` 폴백).
 - **`loopsym` CLI** (`loopsym [model.json]`, `python -m loopsym`) — 뷰어를
   크로미엄 `--app` 모드의 독립 프로그램 창으로 연다 (의존성 0, 폴백 = 브라우저 탭).
+- **Joystick 블록** (Interfaces) — 브라우저 Gamepad API → 서버 → 블록으로
+  실시간 조종 (RC Mode 2 매핑, 버튼 모드 래치, 입력 없으면 중립+호버 추력).
+  데모 `examples/ex10_joystick_fly.py` (수동 자세 ↔ 위치유지 모드 전환).
 - 뷰어: 계측기 워크벤치 디자인, Scope 팝업 창, 포트 이름 라벨/툴팁,
   서브시스템 겉면 포트 이름, `render_html(t_end=, dt=, save_name=)`,
   file:// Pyodide CDN 폴백, 믹서/플랜트 프레임 선택(quad X/+, hexa, octo),

@@ -512,9 +512,14 @@ const LIB = {
     defaults: { waypoints: "2,0,-6; 2,2,-6; 0,0,-5", radius: 0.5, st: 0.004 },
     pin: ["pN", "pE", "pD"], pout: ["n_sp", "e_sp", "d_sp", "wp_idx"],
     summary: p => `${String(p.waypoints).split(";").filter(s => s.trim()).length} wp` },
+  // 게임패드 (loopsym.joystick — 서버 모드 실시간 실행에서 라이브 입력)
+  Joystick: { cat: "interfaces", tag: "joy", nIn: () => 0, nOut: () => 5,
+    defaults: { deadzone: 0.05, idle_thrust: 0.5, mode_btns: "0,1", st: 0.004 },
+    pout: ["roll", "pitch", "yaw", "thrust", "mode"],
+    summary: () => "RC mode 2" },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
-                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)", navigation: "var(--tag-sub)" };
+                    plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)", navigation: "var(--tag-sub)", interfaces: "var(--tag-disc)" };
 
 /* ---------------- 모델 상태 ---------------- */
 let model = EMBEDDED ? JSON.parse(JSON.stringify(EMBEDDED)) : demoModel();
@@ -1508,10 +1513,29 @@ function runOnServer(tEnd, dt) {
     serverRun = { accum: { time: [], signals: {}, labels: {} }, lastDraw: 0, resolve, reject };
     const mode = document.getElementById("inRT").checked ? "realtime" : "sim";
     serverWs.send(JSON.stringify({ cmd: "run", diagram: model, t_end: tEnd, dt, mode }));
+    startJoyPump();
   });
 }
 function stopServer() {
   if (serverWs && serverRun) serverWs.send(JSON.stringify({ cmd: "stop" }));
+}
+
+/* ---- 게임패드 → 서버 (Joystick 블록 라이브 입력) ---- */
+let joyTimer = null;
+addEventListener("gamepadconnected", e =>
+  status(`게임패드 연결됨: ${e.gamepad.id.slice(0, 40)} — 실시간 실행 중 Joystick 블록으로 전달`, "ok"));
+function startJoyPump() {
+  if (joyTimer) clearInterval(joyTimer);
+  joyTimer = setInterval(() => {
+    if (!serverWs || !serverRun) { clearInterval(joyTimer); joyTimer = null; return; }
+    const gp = (navigator.getGamepads ? navigator.getGamepads() : []).find(g => g);
+    if (!gp) return;
+    serverWs.send(JSON.stringify({
+      cmd: "joy",
+      axes: Array.from(gp.axes),
+      buttons: gp.buttons.map(b => b.pressed ? 1 : 0),
+    }));
+  }, 25);                       // 40Hz — 물리(250Hz)는 마지막 값을 ZOH 로 쓴다
 }
 
 const toScopeCards = res => Object.keys(res.signals).map(disp => ({
