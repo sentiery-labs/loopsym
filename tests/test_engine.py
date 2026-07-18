@@ -218,3 +218,48 @@ def test_save_load_roundtrip(tmp_path):
     pos1 = {b["name"]: (b["x"], b["y"]) for b in j1["blocks"]}
     pos2 = {b["name"]: (b["x"], b["y"]) for b in j2["blocks"]}
     assert pos1 == pos2
+
+
+# ---------------------------------------------------------------- 함수형 PyFunction
+def test_pyfunction_def_form_inference():
+    """def 형: 시그니처에서 포트 수/이름, return 에서 출력 수 자동 추론."""
+    p = PyFunction("def ctrl(t, ref, y):\n    e = ref - y\n    return 3*e, 2*e")
+    assert (p.n_in, p.n_out) == (2, 2)
+    assert p.in_names == ["ref", "y"]
+    assert p.output(0.0, (5.0, 2.0), ()) == (9.0, 6.0)
+
+
+def test_pyfunction_def_form_helpers_and_no_t():
+    """여러 def = 마지막이 블록 함수(위는 헬퍼), t 는 선택."""
+    p = PyFunction("def sq(x):\n    return x*x\n"
+                   "def dist(a, b):\n    return sqrt(sq(a) + sq(b))")
+    assert (p.n_in, p.n_out) == (2, 1)
+    assert p.output(0, (3.0, 4.0), ()) == (5.0,)
+
+
+def test_pyfunction_def_form_requires_return():
+    with pytest.raises(ValueError, match="return"):
+        PyFunction("def f(a):\n    x = a")
+
+
+def test_pyfunction_def_form_closed_loop_and_roundtrip():
+    """def 형 제어기(P 항)로 PI 폐루프 — 기준값 재현 + JSON 라운드트립.
+
+    함수형은 무상태다 — 적분은 Integrator 블록 몫 (Simulink MFcn 과 동일 원칙)."""
+    bd = Diagram()
+    ref = bd.add(Step(t_on=1.0)); err = bd.add(Sum("+-"))
+    kp = bd.add(PyFunction("def p_ctrl(e):\n    return 3.0*e"))
+    it = bd.add(Integrator()); ki = bd.add(Gain(2.0)); add = bd.add(Sum("++"))
+    plant = bd.add(TransferFunction([1], [1, 2, 1])); sc = bd.add(Scope())
+    bd.connect(ref, err[0]); bd.connect(plant, err[1])
+    bd.connect(err, kp); bd.connect(err, it); bd.connect(it, ki)
+    bd.connect(kp, add[0]); bd.connect(ki, add[1]); bd.connect(add, plant)
+    bd.connect(plant, sc)
+    run(bd, 10.0, 0.01)
+    assert abs(sc.data[0][-1] - 1.000189) < 1e-6
+    # JSON 라운드트립 (def 형 expr 문자열 보존)
+    j = export_json(bd)
+    bd2 = load_json(j)
+    sc2 = [b for b in bd2.blocks if isinstance(b, Scope)][0]
+    run(bd2, 10.0, 0.01)
+    assert sc2.data[0][-1] == sc.data[0][-1]

@@ -9,7 +9,9 @@ Simulink 대응표:
   Scope                    <- Sinks
 """
 
+import ast
 import math
+import textwrap
 
 from .core import Block
 
@@ -17,6 +19,40 @@ from .core import Block
 _MATH_ENV = {k: getattr(math, k) for k in dir(math) if not k.startswith("_")}
 for _f in (abs, min, max, sum, round, len):
     _MATH_ENV[_f.__name__] = _f
+
+
+def _def_signature(src):
+    """함수형 PyFunction 판별/분석.
+
+    src 에 최상위 def 가 있으면 (이름, 입력 인자 이름들, t 사용 여부,
+    출력 수) 를 반환하고, 없으면 None. 마지막 def 가 블록 함수이고
+    첫 인자가 't' 면 시간을 받는다. 출력 수 = 첫 return 의 튜플 길이
+    (return 이 없으면 None → 호출부에서 에러)."""
+    try:
+        tree = ast.parse(textwrap.dedent(src))
+    except SyntaxError:
+        return None
+    defs = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+    if not defs:
+        return None
+    fn = defs[-1]
+    params = [a.arg for a in fn.args.args]
+    has_t = bool(params) and params[0] == "t"
+    if has_t:
+        params = params[1:]
+    def returns(node):               # 중첩 def 안의 return 은 제외
+        for c in ast.iter_child_nodes(node):
+            if isinstance(c, ast.FunctionDef):
+                continue
+            if isinstance(c, ast.Return) and c.value is not None:
+                yield c
+            yield from returns(c)
+
+    n_out = None
+    for r in returns(fn):
+        n_out = len(r.value.elts) if isinstance(r.value, ast.Tuple) else 1
+        break
+    return fn.name, params, has_t, n_out
 
 
 # ----------------------------------------------------------------------
@@ -120,15 +156,23 @@ class Product(Block):
 class PyFunction(Block):
     """MATLAB Function 블록의 파이썬판.
 
-    세 가지 사용법:
+    네 가지 사용법:
       1) 식 문자열 — 입력은 u0, u1, ... 시간은 t, math 함수 사용 가능.
            PyFunction("4.0*u0 - 1.2*u1", n_in=2)
       2) 여러 줄 문장 — 출력을 y (단일) 또는 y0..y{n_out-1} 에 대입.
            PyFunction("e = u0 - u1\\ny0 = 3*e\\ny1 = 2*e", n_in=2, n_out=2)
-         (뷰어에서 블록 더블클릭 → 코드 편집기로 작성)
-      3) 파이썬 callable — func(t, u0, u1, ...) -> float 또는 tuple
+      3) **함수형 (Simulink MATLAB Function 스타일)** — def 로 쓰면
+         시그니처에서 포트 수와 이름을 자동 추론한다:
+           PyFunction('''
+           def ctrl(t, ref, y):          # 첫 인자 t 는 선택 (시간)
+               e = ref - y
+               return 3*e, 2*e           # return 항 수 = 출력 포트 수
+           ''')
+         입력 포트 = t 를 제외한 인자(이름이 포트 라벨이 된다), 여러 def 가
+         있으면 마지막 def 가 블록 함수(위쪽은 헬퍼 — 서브함수 상당).
+      4) 파이썬 callable — func(t, u0, u1, ...) -> float 또는 tuple
            PyFunction(func=my_controller, n_in=2)
-    문자열 방식(1, 2)은 다이어그램 뷰어(HTML)로 내보낼 때도 그대로 동작한다.
+    문자열 방식(1~3)은 다이어그램 뷰어(HTML)로 내보낼 때도 그대로 동작한다.
     """
 
     def __init__(self, expr=None, func=None, n_in=1, n_out=1, name=None):
@@ -137,7 +181,11 @@ class PyFunction(Block):
             raise ValueError("expr 또는 func 중 하나만 지정")
         self.expr, self.func = expr, func
         self.n_in, self.n_out = n_in, n_out
+        self._deffn = None
         if expr is not None:
+            if _def_signature(expr):
+                self._compile_def(expr)
+                return
             try:                    # 한 줄 식이면 eval, 아니면 문장(exec)으로
                 self._code = compile(expr, f"<PyFunction {self.name}>", "eval")
                 self._is_expr = True
@@ -145,8 +193,22 @@ class PyFunction(Block):
                 self._code = compile(expr, f"<PyFunction {self.name}>", "exec")
                 self._is_expr = False
 
+    def _compile_def(self, src):
+        """함수형: 마지막 def 를 블록 함수로. 포트 수/이름은 시그니처에서."""
+        sig = _def_signature(src)
+        fname, params, self._has_t, n_out = sig
+        if n_out is None:
+            raise ValueError(f"{self.name}: 함수형 PyFunction 은 return 이 필요")
+        self.in_names, self.n_in = params, len(params)
+        self.n_out = n_out
+        g = dict(_MATH_ENV, __builtins__={})
+        exec(compile(textwrap.dedent(src), f"<PyFunction {self.name}>", "exec"), g)
+        self._deffn = g[fname]
+
     def output(self, t, u, x):
-        if self.func is not None:
+        if self._deffn is not None:
+            y = self._deffn(t, *u) if self._has_t else self._deffn(*u)
+        elif self.func is not None:
             y = self.func(t, *u)
         elif self._is_expr:
             env = dict(_MATH_ENV, t=t, **{f"u{i}": v for i, v in enumerate(u)})

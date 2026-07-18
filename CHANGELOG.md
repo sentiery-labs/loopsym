@@ -5,6 +5,10 @@
 UX 리뷰(docs/reviews/ux_review_codex.md) 대응 릴리스 — 골든 패스:
 `pip install loopsym` → `loopsym` → ▶ 실행 → Scope.
 
+- **함수형 PyFunction** (Simulink MATLAB Function 스타일) — `def f(t, a, b):
+  … return x, y` 를 쓰면 시그니처에서 입력 포트 수/이름, return 에서 출력
+  수를 자동 추론 (여러 def = 마지막이 블록 함수, 위는 헬퍼). 뷰어 코드
+  편집기 저장 시 n_in/n_out 자동 설정 + 인자 이름이 포트 라벨로 표시.
 - **인자 없는 `loopsym` = PI 데모** (연결 완료 + Scope). `--blank` 빈 캔버스,
   `--example pi|pendulum|discrete_pi` 번들 예제, `--help` 에 모드 안내.
 - 번들 예제 JSON 3종을 패키지 데이터로 포함 (`loopsym/examples/*.json`,

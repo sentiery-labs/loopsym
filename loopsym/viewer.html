@@ -367,12 +367,16 @@
     </span>
   </div>
   <div class="fn-body">
-    <textarea id="fnExpr" rows="10" spellcheck="false" placeholder="예) 한 줄 식:  3.0*(u0-u1) - 2.0*u2&#10;예) 여러 줄:   e = u0 - u1&#10;              y0 = 3*e&#10;              y1 = 2*e"></textarea>
+    <textarea id="fnExpr" rows="10" spellcheck="false" placeholder="권장) 함수형 (MATLAB Function 스타일 — 포트 수/이름 자동):&#10;  def ctrl(t, ref, y):&#10;      e = ref - y&#10;      return 3*e, 2*e&#10;&#10;예) 한 줄 식:  3.0*(u0-u1) - 2.0*u2&#10;예) 여러 줄:   e = u0 - u1&#10;              y0 = 3*e&#10;              y1 = 2*e"></textarea>
     <div class="hint">
-      쓸 수 있는 이름: <span class="mono">t</span>, <span class="mono">u0..u{n_in-1}</span>,
-      math 함수(<span class="mono">sin cos tan atan2 sqrt exp pi</span> …), <span class="mono">abs/min/max</span>.<br>
-      한 줄이면 <b>식</b>으로, 여러 줄이면 <b>문장</b>으로 실행 — 문장형은 출력을
-      <span class="mono">y</span> (단일) 또는 <span class="mono">y0..y{n_out-1}</span> 에 대입.
+      <b>함수형(권장)</b>: <span class="mono">def f(t, a, b): … return x, y</span> —
+      입력 포트 = <span class="mono">t</span> 를 제외한 인자(이름이 포트 라벨),
+      출력 포트 = return 항 수. <b>저장하면 n_in/n_out 이 자동 설정</b>된다.
+      여러 <span class="mono">def</span> 를 쓰면 마지막이 블록 함수(위는 헬퍼).<br>
+      식/문장형: 입력 <span class="mono">u0..u{n_in-1}</span>, 출력
+      <span class="mono">y</span> 또는 <span class="mono">y0..</span> 대입.
+      공통으로 <span class="mono">t</span>, math 함수(<span class="mono">sin cos atan2
+      sqrt pi</span> …), <span class="mono">abs/min/max</span> 사용 가능.
     </div>
     <div class="fn-io">
       <label>n_in <input type="text" id="fnNin"></label>
@@ -410,6 +414,36 @@ const BLOCKSIM_SRC = /*__BLOCKSIM_SRC__*/null;
 
 /* ---------------- 블록 메타데이터 (팔레트/포트 수/기본값 — blocks.py 와 대응) ---------------- */
 const countIO = (b, type) => b.inner ? b.inner.blocks.filter(x => x.type === type).length : 0;
+// 함수형 PyFunction (def ...) 의 시그니처 파싱 — blocks.py _def_signature 와 동일 규약:
+// 마지막 def 가 블록 함수, 첫 인자 t 는 시간, return 항 수 = 출력 수.
+// LIB 의 pin/pout 은 정적 배열 또는 params 함수 — 둘 다 배열(또는 null)로 해석
+function resolvedPorts(b, io) {
+  const v = (LIB[b.type] || {})[io];
+  const arr = typeof v === "function" ? v(b.params) : v;
+  return arr || null;
+}
+function parseDefPorts(expr) {
+  const defs = [...String(expr || "").matchAll(/^\s*def\s+\w+\s*\(([^)]*)\)\s*:/gm)];
+  if (!defs.length) return null;
+  let pin = defs[defs.length - 1][1].split(",")
+    .map(s => s.trim().split("=")[0].trim()).filter(Boolean);
+  if (pin[0] === "t") pin = pin.slice(1);
+  const rets = [...String(expr).matchAll(/^\s*return\s+(.+?)\s*$/gm)];
+  let nOut = null, pout = null;
+  if (rets.length) {
+    const parts = [];                 // 괄호 깊이 0 의 콤마로 분리
+    let depth = 0, cur = "";
+    for (const ch of rets[rets.length - 1][1]) {
+      if ("([{".includes(ch)) depth++;
+      if (")]}".includes(ch)) depth--;
+      if (ch === "," && depth === 0) { parts.push(cur); cur = ""; } else cur += ch;
+    }
+    parts.push(cur);
+    nOut = parts.length;
+    pout = parts.map((s, i) => /^[A-Za-z_]\w*$/.test(s.trim()) ? s.trim() : "y" + i);
+  }
+  return { pin, pout, nOut };
+}
 const FRAME_N = { quad_x: 4, quad_plus: 4, hexa_x: 6, octo_x: 8 };   // 프레임별 로터 수
 const LIB = {
   Constant: { cat: "source", tag: "const", nIn: () => 0, nOut: () => 1,
@@ -428,7 +462,10 @@ const LIB = {
     defaults: { lo: -1.0, hi: 1.0 }, summary: p => `[${p.lo}, ${p.hi}]` },
   PyFunction: { cat: "math", tag: "ƒ(t,u)", nIn: b => b.params.n_in | 0, nOut: b => b.params.n_out | 0,
     defaults: { expr: "u0", n_in: 1, n_out: 1 },
-    summary: p => p.expr === null ? "(callable)" : String(p.expr) },
+    pin: p => parseDefPorts(p.expr)?.pin,      // 함수형이면 인자 이름 = 포트 라벨
+    pout: p => parseDefPorts(p.expr)?.pout,
+    summary: p => p.expr === null ? "(callable)"
+      : (parseDefPorts(p.expr) ? "def " + (String(p.expr).match(/def\s+(\w+)/)?.[1] || "") + "()" : String(p.expr)) },
   Integrator: { cat: "state", tag: "int", nIn: () => 1, nOut: () => 1,
     defaults: { x0: 0.0 }, summary: p => p.x0 ? `x0 = ${p.x0}` : "" },
   TransferFunction: { cat: "state", tag: "tf", nIn: () => 1, nOut: () => 1,
@@ -591,7 +628,7 @@ function bW(b) {
     case "Inport": case "Outport": return 64;
     case "Mux": case "Demux": return 30;
     case "Subsystem": return 156;
-    default: return (LIB[b.type]?.pin || LIB[b.type]?.pout) ? 172 : 132;   // 포트 이름 있는 블록은 넓게
+    default: return (resolvedPorts(b, "pin") || resolvedPorts(b, "pout")) ? 172 : 132;   // 포트 이름 있는 블록은 넓게
   }
 }
 function bH(b) {
@@ -854,7 +891,7 @@ function drawShape(g, b) {
     }
     default: {   // PyFunction 및 일반 rect
       rect();
-      if (L.pin || L.pout)   // 포트 이름 라벨과 안 겹치게 태그는 상단 중앙
+      if (resolvedPorts(b, "pin") || resolvedPorts(b, "pout"))   // 포트 이름 라벨과 안 겹치게 태그는 상단 중앙
         txt(g, { class: "btag", x: cx, y: b.y + 13, fill: TAG_COLOR[L.cat], "text-anchor": "middle" }, L.tag);
       else
         txt(g, { class: "btag", x: b.x + 8, y: b.y + 13, fill: TAG_COLOR[L.cat] }, L.tag);
@@ -943,10 +980,10 @@ function render() {
   for (const b of cm.blocks) {
     const g = el("g", { class: "blk" + (selIds().includes(b.id) ? " sel" : ""), "data-blk": b.id }, svg);
     drawShape(g, b);
-    const L = LIB[b.type] || {};
+    const pinA = resolvedPorts(b, "pin"), poutA = resolvedPorts(b, "pout");
     for (let i = 0; i < nIn(b); i++) {
       const [x, y] = inPos(b, i);
-      const nm = (L.pin && L.pin[i]) || "u" + i;
+      const nm = (pinA && pinA[i]) || "u" + i;
       const c = el("circle", { class: "port in", cx: x, cy: y, r: 5, "data-blk": b.id, "data-in": i }, g);
       el("title", {}, c).textContent = nm;                      // 호버 툴팁
       if (nIn(b) > 1 && b.type !== "Sum" && b.type !== "Product" && b.type !== "Subsystem")
@@ -954,10 +991,10 @@ function render() {
     }
     for (let i = 0; i < nOut(b); i++) {
       const [x, y] = outPos(b, i);
-      const nm = (L.pout && L.pout[i]) || "y" + i;
+      const nm = (poutA && poutA[i]) || "y" + i;
       const c = el("circle", { class: "port out", cx: x, cy: y, r: 5, "data-blk": b.id, "data-out": i }, g);
       el("title", {}, c).textContent = nm;
-      if (nOut(b) > 1 && b.type !== "Demux" && b.type !== "Subsystem" && L.pout)
+      if (nOut(b) > 1 && b.type !== "Demux" && b.type !== "Subsystem" && poutA)
         txt(g, { class: "portlbl", x: x - 8, y: y + 3, "text-anchor": "end" }, nm);
     }
   }
@@ -1207,11 +1244,18 @@ document.getElementById("btnFnSave").addEventListener("click", () => {
   if (!fnTarget) return;
   const expr = document.getElementById("fnExpr").value.trim();
   if (!expr) { status("코드가 비어 있습니다.", "err"); return; }
-  const nin = parseInt(document.getElementById("fnNin").value, 10);
-  const nout = parseInt(document.getElementById("fnNout").value, 10);
   fnTarget.params.expr = expr;
-  if (nin >= 0) fnTarget.params.n_in = nin;
-  if (nout >= 1) fnTarget.params.n_out = nout;
+  const sig = parseDefPorts(expr);
+  if (sig) {                        // 함수형: 시그니처가 포트 수를 결정 (MATLAB Function 식)
+    fnTarget.params.n_in = sig.pin.length;
+    fnTarget.params.n_out = sig.nOut ?? fnTarget.params.n_out;
+    status(`함수형 — 입력 ${sig.pin.length}개(${sig.pin.join(", ") || "없음"}), 출력 ${fnTarget.params.n_out}개 자동 설정`, "ok");
+  } else {
+    const nin = parseInt(document.getElementById("fnNin").value, 10);
+    const nout = parseInt(document.getElementById("fnNout").value, 10);
+    if (nin >= 0) fnTarget.params.n_in = nin;
+    if (nout >= 1) fnTarget.params.n_out = nout;
+  }
   pruneWires(fnTarget);
   dlgFn.close(); fnTarget = null;
   render();
