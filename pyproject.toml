@@ -19,6 +19,9 @@ classifiers = [
 ]
 dependencies = []            # 코어는 순수 파이썬 — 의존성 0 (교육용 설계 원칙)
 
+[project.scripts]
+loopsym = "loopsym.__main__:main"    # `loopsym [model.json]` → 독립 앱 창
+
 [project.optional-dependencies]
 examples = ["matplotlib"]
 server = ["fastapi", "uvicorn"]          # 로컬 서버 모드 (python -m loopsym.server)
