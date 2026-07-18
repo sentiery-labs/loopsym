@@ -205,6 +205,14 @@
   #bsSvg .port:hover { stroke-width: 3; }
   #bsSvg .wire { fill: none; stroke: var(--wire); stroke-width: 1.8; stroke-linejoin: round; pointer-events: none; }
   #bsSvg .wire.sel { stroke: var(--accent); stroke-width: 3; }
+  #bsSvg .wire.bundle { stroke-width: 3.6; }
+  #bsSvg .wire.bundle.sel { stroke-width: 4.6; }
+  #bsSvg .buslash { stroke: var(--wire); stroke-width: 1.4; pointer-events: none; }
+  #bsSvg .busstub { stroke: var(--wire); stroke-width: 1.1; fill: none; pointer-events: none; opacity: .8; }
+  #bsSvg .buslbl {
+    font-family: ui-monospace, Consolas, monospace; font-size: 10px;
+    fill: var(--ink-2); pointer-events: none; user-select: none;
+  }
   #bsSvg .wirehit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
   #bsSvg .wirehit.drag-h { cursor: ew-resize; }   /* 세로 세그 → 좌우로 끈다 */
   #bsSvg .wirehit.drag-v { cursor: ns-resize; }   /* 가로 세그 → 상하로 끈다 */
@@ -868,7 +876,24 @@ function render() {
   el("path", { d: "M 100 0 L 0 0 0 100", fill: "none", stroke: "var(--grid-major)", "stroke-width": 1 }, pat2);
   el("rect", { width: 1600, height: 900, fill: "url(#grid2)" }, svg);
 
+  // ---- 와이어 번들 (표시 전용, WORKPLAN §7-3): 같은 블록 쌍 사이 나란한
+  // 배선 ≥3 개는 굵은 선 하나 + ×N 배지로 그린다 — Simulink 의 벡터 굵은선
+  // 상당. 배선 시맨틱/JSON 은 낱개 스칼라 그대로 (포트 연결도 낱개로 한다).
+  // 손으로 경로를 조정한(pts) 와이어는 낱개 유지.
+  const bundles = {};
   cm.wires.forEach((w, wi) => {
+    if (w.pts) return;
+    const k = w.src[0] + ">" + w.dst[0];
+    (bundles[k] = bundles[k] || []).push(wi);
+  });
+  const inBundle = new Set();
+  for (const k in bundles) {
+    if (bundles[k].length >= 3) bundles[k].forEach(wi => inBundle.add(wi));
+    else delete bundles[k];
+  }
+
+  cm.wires.forEach((w, wi) => {
+    if (inBundle.has(wi)) return;                 // 번들은 아래에서 대표선 하나로
     const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
     if (!sb || !db) return;
     const poly = wirePoly(cm, w, sb, db);
@@ -881,6 +906,37 @@ function render() {
                    class: cls, "data-wire": wi, "data-seg": s }, svg);
     }
   });
+
+  for (const k in bundles) {
+    const idxs = bundles[k];
+    const rep = cm.wires[idxs[Math.floor(idxs.length / 2)]];   // 가운데 포트의 경로가 대표
+    const sb = cm.blocks.find(b => b.id === rep.src[0]), db = cm.blocks.find(b => b.id === rep.dst[0]);
+    if (!sb || !db) continue;
+    const poly = wirePoly(cm, rep, sb, db);
+    const selB = selection?.kind === "bundle" && selection.key === k;
+    // 하네스 스텁: 각 포트 → 대표선 합류점 (선 없는 포트가 떠 보이지 않게)
+    const [s0, d0] = [poly[0], poly[poly.length - 1]];
+    for (const wi of idxs) {
+      const w2 = cm.wires[wi];
+      const [sx, sy] = outPos(sb, w2.src[1]);
+      const [dx, dy] = inPos(db, w2.dst[1]);
+      el("path", { d: `M ${sx} ${sy} L ${sx + 6} ${sy} L ${sx + 13} ${s0[1]}`,
+                   class: "busstub" }, svg);
+      el("path", { d: `M ${dx - 13} ${d0[1]} L ${dx - 6} ${dy} L ${dx} ${dy}`,
+                   class: "busstub" }, svg);
+    }
+    el("path", { d: polyPath(poly), class: "wire bundle" + (selB ? " sel" : "") }, svg);
+    el("path", { d: polyPath(poly), class: "wirehit", "data-bundle": k }, svg);
+    // ×N 배지: 가장 긴 세그먼트의 중점에 사선 + 개수 (Simulink 벡터폭 표기)
+    let bi = 0, bl = -1;
+    for (let s = 0; s < poly.length - 1; s++) {
+      const L2 = Math.abs(poly[s][0] - poly[s + 1][0]) + Math.abs(poly[s][1] - poly[s + 1][1]);
+      if (L2 > bl) { bl = L2; bi = s; }
+    }
+    const mx = (poly[bi][0] + poly[bi + 1][0]) / 2, my2 = (poly[bi][1] + poly[bi + 1][1]) / 2;
+    el("path", { d: `M ${mx - 4} ${my2 + 6} L ${mx + 4} ${my2 - 6}`, class: "buslash" }, svg);
+    txt(svg, { class: "buslbl", x: mx + 7, y: my2 - 4 }, String(idxs.length));
+  }
 
   for (const b of cm.blocks) {
     const g = el("g", { class: "blk" + (selIds().includes(b.id) ? " sel" : ""), "data-blk": b.id }, svg);
@@ -996,6 +1052,14 @@ svg.addEventListener("pointerdown", ev => {
         const b = blk(i); return [i, [mx - b.x, my - b.y]];
       })) };
       svg.setPointerCapture(ev.pointerId);
+    } else if (t.dataset.bundle !== undefined) {
+      // 번들 클릭 = 묶음 전체 선택 (삭제는 묶음 단위 — 낱개 편집은 포트에서 재배선)
+      const k = t.dataset.bundle;
+      const idxs = [];
+      cm.wires.forEach((w, wi) => {
+        if (!w.pts && w.src[0] + ">" + w.dst[0] === k) idxs.push(wi);
+      });
+      select({ kind: "bundle", key: k, indices: idxs });
     } else if (t.dataset.wire !== undefined) {
       // 클릭 = 선택, 가운데 세그먼트 드래그 = 배선 조정, 더블클릭 = 자동 배선 리셋
       const wi = +t.dataset.wire;
@@ -1115,6 +1179,11 @@ document.addEventListener("keydown", ev => {
   if (ev.key === "Escape" && path.length) { navigateTo(path.length - 1); return; }
   if (ev.key !== "Delete" && ev.key !== "Backspace") return;
   if (selection?.kind === "wire") { cur().wires.splice(selection.index, 1); select(null); }
+  else if (selection?.kind === "bundle") {
+    const rm = new Set(selection.indices);
+    cur().wires = cur().wires.filter((_, wi) => !rm.has(wi));
+    select(null);
+  }
   else if (selection?.kind === "blocks") deleteBlocks(selection.ids);
 });
 
@@ -1300,6 +1369,25 @@ function renderInspector() {
     const del = document.createElement("button");
     del.className = "danger"; del.textContent = "와이어 삭제";
     del.addEventListener("click", () => { cm.wires.splice(selection.index, 1); select(null); });
+    box.appendChild(del);
+    return;
+  }
+  if (selection.kind === "bundle") {
+    const cm = cur();
+    const ws = selection.indices.map(wi => cm.wires[wi]).filter(Boolean);
+    if (!ws.length) { select(null); return; }
+    const sb = cm.blocks.find(b => b.id === ws[0].src[0]);
+    const db = cm.blocks.find(b => b.id === ws[0].dst[0]);
+    box.innerHTML = `<div class="hint mono">${sb?.name} ⇒ ${db?.name}  ×${ws.length}</div>
+      <div class="hint">나란한 배선 묶음 (표시만 묶임 — 신호는 낱개 스칼라).<br>${
+        ws.map(w => `y${w.src[1]}→u${w.dst[1]}`).join(", ")}</div>`;
+    const del = document.createElement("button");
+    del.className = "danger"; del.textContent = `묶음 전체 삭제 (×${ws.length})`;
+    del.addEventListener("click", () => {
+      const rm = new Set(selection.indices);
+      cm.wires = cm.wires.filter((_, wi) => !rm.has(wi));
+      select(null);
+    });
     box.appendChild(del);
     return;
   }
