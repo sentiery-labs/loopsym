@@ -9,16 +9,25 @@
 """
 
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
 import webbrowser
 
-# ponytail: 리눅스/맥 대표 후보만 — 필요해지면 Windows 절대경로 추가
 _CHROMIUMS = ["google-chrome", "google-chrome-stable", "chromium",
-              "chromium-browser", "brave-browser", "microsoft-edge", "chrome"]
-_MAC_APPS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+              "chromium-browser", "brave-browser", "microsoft-edge",
+              "chrome", "msedge"]
+_MAC_APPS = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+             "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"]
+# Windows 는 PATH 에 없는 게 보통 — 표준 설치 경로 직접 확인.
+# Edge 는 Win10/11 기본 내장이라 사실상 항상 잡힌다.
+_WIN_APPS = [r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+             r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe",
+             r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+             r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+             r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"]
 
 
 def _find_chromium():
@@ -28,6 +37,11 @@ def _find_chromium():
             return p
     if sys.platform == "darwin":
         for p in _MAC_APPS:
+            if os.path.exists(p):
+                return p
+    if os.name == "nt":
+        for raw in _WIN_APPS:
+            p = os.path.expandvars(raw)
             if os.path.exists(p):
                 return p
     return None
@@ -53,13 +67,17 @@ def open_app(model=None, title="loopsym", t_end=None, dt=None,
         html_path = os.path.join(tempfile.gettempdir(), f"{stem}_viewer.html")
     path = render_html(bd, html_path, title=title, t_end=t_end, dt=dt,
                        save_name=save_name)
-    url = "file://" + path
+    url = pathlib.Path(path).as_uri()          # Windows 드라이브 문자/역슬래시 안전
 
     chromium = _find_chromium()
     if chromium:
-        subprocess.Popen([chromium, f"--app={url}"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)     # 셸 종료와 독립
+        kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if os.name == "nt":                    # 셸 종료와 독립 (플랫폼별 방식)
+            kw["creationflags"] = (subprocess.DETACHED_PROCESS
+                                   | subprocess.CREATE_NEW_PROCESS_GROUP)
+        else:
+            kw["start_new_session"] = True
+        subprocess.Popen([chromium, f"--app={url}"], **kw)
     else:
         webbrowser.open(url)
     return path
