@@ -1593,8 +1593,9 @@ async function initEngine() {
   }
   if (!py)
     throw new Error("Pyodide 로드 실패 — 첫 실행은 인터넷(CDN)이 필요합니다. " +
-      "오프라인이면 터미널에서 `python -m loopsym.server` 를 실행한 뒤 " +
-      "이 페이지를 새로고침하세요 (Local Server 모드로 전환됩니다).");
+      "오프라인 복구 2단계: ① python -m pip install \"loopsym[server]\" " +
+      "(최초 1회 — 온라인에서 미리) ② python -m loopsym.server 실행 후 " +
+      "이 페이지를 새로고침 (Local Server 모드로 전환됩니다).");
   const src = await fetchEngineSources();
   py.FS.mkdirTree("/app/loopsym");
   for (const f in src) py.FS.writeFile("/app/loopsym/" + f, src[f]);

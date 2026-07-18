@@ -53,6 +53,17 @@ def test_help_mentions_modes(capsys):
         assert kw in out                                   # 수용 기준 5
 
 
+def test_offline_recovery_message_two_steps():
+    """수용 기준 4 (Codex 판정 반영): 오프라인 복구 안내는 두 단계 —
+    server extra 설치 + 서버 실행. core-only 설치에서 첫 명령이 유효해야 한다."""
+    import os
+    import loopsym
+    html = open(os.path.join(os.path.dirname(loopsym.__file__), "viewer.html"),
+                encoding="utf-8").read()
+    assert "loopsym[server]" in html          # ① server extra 설치 안내
+    assert "python -m loopsym.server" in html  # ② 서버 실행 안내
+
+
 def test_bundled_examples_run():
     """번들 3종이 회귀 기준값을 재현한다 (wheel 데모 정본 무결성)."""
     for name, (T, dt), ref in (("pi", (10.0, 0.01), 1.000189),
