@@ -1,0 +1,277 @@
+{
+ "blocks": [
+  {
+   "id": 0,
+   "type": "Step",
+   "name": "ref",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "t_on": 1.0,
+    "height": 1.0
+   },
+   "x": 60,
+   "y": 60
+  },
+  {
+   "id": 1,
+   "type": "Sum",
+   "name": "err",
+   "n_in": 2,
+   "n_out": 1,
+   "params": {
+    "signs": "+-"
+   },
+   "x": 250,
+   "y": 60
+  },
+  {
+   "id": 2,
+   "type": "Subsystem",
+   "name": "PI_ctrl",
+   "n_in": 1,
+   "n_out": 1,
+   "params": {
+    "Kp": 3.0,
+    "Ki": 2.0
+   },
+   "x": 440,
+   "y": 60,
+   "inner": {
+    "blocks": [
+     {
+      "id": 0,
+      "type": "Inport",
+      "name": "e",
+      "n_in": 0,
+      "n_out": 1,
+      "params": {
+       "index": 0
+      },
+      "x": 60,
+      "y": 60
+     },
+     {
+      "id": 1,
+      "type": "Gain",
+      "name": "Kp",
+      "n_in": 1,
+      "n_out": 1,
+      "params": {
+       "k": 3.0
+      },
+      "x": 250,
+      "y": 180
+     },
+     {
+      "id": 2,
+      "type": "Integrator",
+      "name": "err_int",
+      "n_in": 1,
+      "n_out": 1,
+      "params": {
+       "x0": 0.0
+      },
+      "x": 250,
+      "y": 60
+     },
+     {
+      "id": 3,
+      "type": "Gain",
+      "name": "Ki",
+      "n_in": 1,
+      "n_out": 1,
+      "params": {
+       "k": 2.0
+      },
+      "x": 440,
+      "y": 60
+     },
+     {
+      "id": 4,
+      "type": "Sum",
+      "name": "add",
+      "n_in": 2,
+      "n_out": 1,
+      "params": {
+       "signs": "++"
+      },
+      "x": 630,
+      "y": 60
+     },
+     {
+      "id": 5,
+      "type": "Outport",
+      "name": "u",
+      "n_in": 1,
+      "n_out": 0,
+      "params": {
+       "index": 0
+      },
+      "x": 820,
+      "y": 60
+     }
+    ],
+    "wires": [
+     {
+      "src": [
+       0,
+       0
+      ],
+      "dst": [
+       1,
+       0
+      ]
+     },
+     {
+      "src": [
+       0,
+       0
+      ],
+      "dst": [
+       2,
+       0
+      ]
+     },
+     {
+      "src": [
+       2,
+       0
+      ],
+      "dst": [
+       3,
+       0
+      ]
+     },
+     {
+      "src": [
+       1,
+       0
+      ],
+      "dst": [
+       4,
+       0
+      ]
+     },
+     {
+      "src": [
+       3,
+       0
+      ],
+      "dst": [
+       4,
+       1
+      ]
+     },
+     {
+      "src": [
+       4,
+       0
+      ],
+      "dst": [
+       5,
+       0
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": 3,
+   "type": "TransferFunction",
+   "name": "plant",
+   "n_in": 1,
+   "n_out": 1,
+   "params": {
+    "num": [
+     1.0
+    ],
+    "den": [
+     1.0,
+     2.0,
+     1.0
+    ]
+   },
+   "x": 630,
+   "y": 60
+  },
+  {
+   "id": 4,
+   "type": "Scope",
+   "name": "scope",
+   "n_in": 2,
+   "n_out": 0,
+   "params": {
+    "n_in": 2,
+    "labels": [
+     "ref",
+     "y"
+    ]
+   },
+   "x": 820,
+   "y": 60
+  }
+ ],
+ "wires": [
+  {
+   "src": [
+    0,
+    0
+   ],
+   "dst": [
+    1,
+    0
+   ]
+  },
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    1,
+    1
+   ]
+  },
+  {
+   "src": [
+    1,
+    0
+   ],
+   "dst": [
+    2,
+    0
+   ]
+  },
+  {
+   "src": [
+    2,
+    0
+   ],
+   "dst": [
+    3,
+    0
+   ]
+  },
+  {
+   "src": [
+    0,
+    0
+   ],
+   "dst": [
+    4,
+    0
+   ]
+  },
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    4,
+    1
+   ]
+  }
+ ]
+}

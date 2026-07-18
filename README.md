@@ -5,7 +5,62 @@
 에서 실기체(ROS2/HILS)까지 같은 다이어그램으로 가는 드론/로봇 개발 플랫폼.
 전체가 순수 파이썬이라 학생이 한 학기에 바닥부터 따라 만들 수 있는 규모다.
 
-License: Apache-2.0 · Copyright 2026 Sentiery
+License: Apache-2.0 · Copyright 2026 Sentiery ·
+[Repository](https://github.com/sentiery-labs/loopsym) ·
+[Issues](https://github.com/sentiery-labs/loopsym/issues)
+
+> 뷰어는 **데스크톱 전용**입니다 (최소 폭 1024px 권장). 모바일/태블릿
+> 레이아웃은 아직 지원하지 않습니다.
+
+## 빠른 시작 (PyPI — 3단계)
+
+```bash
+python -m pip install loopsym
+loopsym            # PI 폐루프 데모가 로드된 뷰어가 앱 창으로 열린다
+                   # → ▶ 실행 → 아래 Scope 에 ref/y 두 채널 표시
+```
+
+- **첫 실행은 인터넷이 필요합니다** — 브라우저가 Pyodide(파이썬 런타임)를
+  CDN 에서 내려받습니다 (수 초, 이후 캐시). 오프라인이면 상태줄 안내대로
+  `python -m loopsym.server` 를 켜고 새로고침하면 됩니다 (`[server]` extra 필요).
+- 다른 시작점: `loopsym --blank` (빈 캔버스), `loopsym --example pendulum`
+  (번들 예제: pi·pendulum·discrete_pi), `loopsym my_model.json` (저장한 모델).
+  `loopsym --help` 가 전체 형태를 설명합니다.
+
+파이썬 코드로 직접 만들 수도 있습니다 (설치만으로 동작, 의존성 0):
+
+```python
+from loopsym import *
+import webbrowser
+
+bd = Diagram()
+ref   = bd.add(Step(t_on=1.0))
+err   = bd.add(Sum("+-"))
+plant = bd.add(TransferFunction([1], [1, 2, 1]))
+ctrl  = bd.add(PyFunction("3.0*u0", n_in=1))     # <- MATLAB Function 블록처럼
+scope = bd.add(Scope(n_in=2))
+
+bd.connect(ref, err[0]); bd.connect(plant, err[1])
+bd.connect(err, ctrl);   bd.connect(ctrl, plant)
+bd.connect(ref, scope[0]); bd.connect(plant, scope[1])
+
+run(bd, t_end=10.0, dt=0.01)
+path = render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재실행
+print("뷰어:", path)
+webbrowser.open("file://" + path)
+```
+
+## 소스에서 개발
+
+```bash
+git clone https://github.com/sentiery-labs/loopsym && cd loopsym
+python -m pip install -e ".[examples]"     # matplotlib (ex1~ex4 의 PNG 플롯용)
+python examples/ex1_pi_closed_loop.py      # ex1_result.png + ex1_diagram.html 생성
+```
+
+예제 카탈로그(난이도/의존성/생성물)는 `examples/README.md` 참조.
+전체 개발 환경: `pip install -e ".[dev]"` + `npm install` 후
+`python -m pytest tests/ -q` (node+pyodide 있으면 뷰어 스모크 포함).
 
 ## 구성
 
@@ -28,32 +83,16 @@ License: Apache-2.0 · Copyright 2026 Sentiery
 | `benchmarks/` | **실시간 지터 재검증** (`p40_realtime.py --hz --duration`) + 결과 리포트 | — |
 | `spikes/`, `hardware/` | 최초 실시간 스파이크(폐기됨 — benchmarks 가 유효), Bebop 2 스파이크(+안전 체크리스트) | — |
 
-개발: `pip install -e ".[dev]"` + `npm install` 후 `python -m pytest tests/ -q` (node+pyodide 있으면 뷰어 스모크 포함)
+엔진 확장 모듈 (전부 순수 파이썬, PX4 v1.16 검증본 이식):
 
-## 빠른 시작
-
-```bash
-cd loopsym
-python3 examples/ex1_pi_closed_loop.py   # ex1_result.png + ex1_diagram.html 생성
-```
-
-```python
-from loopsym import *
-
-bd = Diagram()
-ref   = bd.add(Step(t_on=1.0))
-err   = bd.add(Sum("+-"))
-plant = bd.add(TransferFunction([1], [1, 2, 1]))
-ctrl  = bd.add(PyFunction("3.0*u0", n_in=1))     # <- MATLAB Function 블록처럼
-scope = bd.add(Scope(n_in=2))
-
-bd.connect(ref, err[0]); bd.connect(plant, err[1])
-bd.connect(err, ctrl);   bd.connect(ctrl, plant)
-bd.connect(ref, scope[0]); bd.connect(plant, scope[1])
-
-run(bd, t_end=10.0, dt=0.01)
-render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재실행
-```
+| 파일 | 내용 |
+|------|------|
+| `loopsym/drone.py` | 6-DoF 멀티로터 플랜트(프레임: quad X/+, hexa, octo) + PX4 Rate/Attitude/Position Controller + Mixer + 화이트박스 조립 블록 |
+| `loopsym/sensors.py` | IMU — fidelity 규약(ideal/noisy, 포트 불변, 시드 고정) |
+| `loopsym/estimation.py` | ComplementaryFilter (Mahony) |
+| `loopsym/navigation.py` | WaypointManager (웨이포인트 순회) |
+| `loopsym/joystick.py` | 게임패드 입력 (브라우저 Gamepad API → 서버, RC Mode 2) |
+| `examples/ex7~ex10` | 드론 위치제어 / IMU fidelity / PX4 화이트박스 / 조이스틱 비행 — `examples/README.md` |
 
 ## 다이어그램 뷰어 (`render_html`)
 
@@ -83,7 +122,10 @@ render_html(bd, "diagram.html")   # 브라우저에서 구조 확인/편집/재�
   동작한다. 원본 `viewer.html` 을 직접 열 때는 옆의 .py 를 fetch 하므로
   repo 를 HTTP 로 서빙해야 한다 (`python -m http.server`).
 - 최초 실행 시 Pyodide 로딩 ~5초 (이후 재실행은 즉시). **오프라인 교실**은
-  `python tools/vendor_pyodide.py` 로 로컬 사본을 설치하면 CDN 없이 동작.
+  두 가지 경로: ① 로컬 서버 모드(`python -m loopsym.server`, 권장 — Pyodide
+  불필요) ② `python tools/vendor_pyodide.py` 로 로컬 사본 설치 후 repo 를
+  **HTTP 로 서빙**해서 열기(`python -m http.server`). `file://` 로 직접 연
+  페이지는 브라우저 보안 때문에 vendored 사본을 못 쓰고 CDN 만 시도한다.
 - 검증: `tests/test_pyodide_smoke.py` 가 node + pyodide(npm) 로 뷰어와 같은
   실행 경로를 헤드리스로 돌려 네이티브 엔진·회귀 기준값과 대조한다
   (repo 루트에서 `npm install` 필요; CI 에서 항상 실행).
@@ -95,8 +137,10 @@ HILS(실제 Pixhawk 연결)와 실시간 러너는 브라우저 샌드박스 밖
 이 모드에서만 동작하게 된다.
 
 ```bash
-pip install -e ".[server]"        # fastapi + uvicorn
-python -m loopsym.server         # ws://localhost:8765
+python -m pip install "loopsym[server]"   # PyPI 설치 사용자 (fastapi + uvicorn)
+# (소스 체크아웃이면: pip install -e ".[server]")
+python -m loopsym.server                  # ws://localhost:8765
+loopsym                                   # 뷰어를 열면 배지가 'Local Server'
 ```
 
 - 뷰어는 페이지 로드 때 자동 감지: 서버가 있으면 좌상단 배지가
@@ -164,4 +208,6 @@ python examples/ex6_ros2_turtlesim.py   # turtlesim 자동 기동 → go-to-goal
 - **실행 의미론**: ① 상태 블록 출력(상태만으로 결정) → ② feedthrough 블록을
   위상 순서로 → ③ 상태 미분 수집 → RK4. Simulink 의 minor/major step 구조의
   단순화판.
-- 신호는 스칼라 하나로 제한 (벡터 신호·서브시스템은 확장 과제).
+- 신호는 스칼라 하나로 제한 — 교육 명료성 원칙. 벡터량은 포트 여러 개로
+  펼치고, 시각 난잡함은 뷰어의 와이어 번들링(나란한 배선 ≥3 = 굵은선 ×N)이
+  해결한다. Mux/Demux 는 제한적 실험 기능 (docs/spike_p14 참조).

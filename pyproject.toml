@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "loopsym"
-version = "0.1.0"
+version = "0.1.1"
 description = "Visual block-diagram simulation for control systems and robotics"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -19,6 +19,11 @@ classifiers = [
 ]
 dependencies = []            # 코어는 순수 파이썬 — 의존성 0 (교육용 설계 원칙)
 
+[project.urls]
+Repository = "https://github.com/sentiery-labs/loopsym"
+Issues = "https://github.com/sentiery-labs/loopsym/issues"
+Changelog = "https://github.com/sentiery-labs/loopsym/blob/main/CHANGELOG.md"
+
 [project.scripts]
 loopsym = "loopsym.__main__:main"    # `loopsym [model.json]` → 독립 앱 창
 
@@ -31,7 +36,7 @@ dev = ["pytest", "matplotlib", "fastapi", "uvicorn", "websockets"]
 packages = ["loopsym"]
 
 [tool.setuptools.package-data]
-loopsym = ["viewer.html"]
+loopsym = ["viewer.html", "examples/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

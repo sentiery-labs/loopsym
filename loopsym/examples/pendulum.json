@@ -1,0 +1,187 @@
+{
+ "blocks": [
+  {
+   "id": 0,
+   "type": "Step",
+   "name": "theta_ref",
+   "n_in": 0,
+   "n_out": 1,
+   "params": {
+    "t_on": 1.0,
+    "height": 0.8
+   },
+   "x": 60,
+   "y": 60
+  },
+  {
+   "id": 1,
+   "type": "PyFunction",
+   "name": "pd_ctrl",
+   "n_in": 3,
+   "n_out": 1,
+   "params": {
+    "expr": "6.0*(u0-u1) - 2.0*u2",
+    "n_in": 3,
+    "n_out": 1
+   },
+   "x": 250,
+   "y": 60
+  },
+  {
+   "id": 2,
+   "type": "PyFunction",
+   "name": "pendulum",
+   "n_in": 3,
+   "n_out": 1,
+   "params": {
+    "expr": "-(9.81/1.0)*sin(u0) - 0.3*u1 + u2",
+    "n_in": 3,
+    "n_out": 1
+   },
+   "x": 440,
+   "y": 60
+  },
+  {
+   "id": 3,
+   "type": "Integrator",
+   "name": "omega",
+   "n_in": 1,
+   "n_out": 1,
+   "params": {
+    "x0": 0.0
+   },
+   "x": 630,
+   "y": 60
+  },
+  {
+   "id": 4,
+   "type": "Integrator",
+   "name": "theta",
+   "n_in": 1,
+   "n_out": 1,
+   "params": {
+    "x0": 0.0
+   },
+   "x": 60,
+   "y": 180
+  },
+  {
+   "id": 5,
+   "type": "Scope",
+   "name": "scope",
+   "n_in": 2,
+   "n_out": 0,
+   "params": {
+    "n_in": 2,
+    "labels": [
+     "ref",
+     "theta"
+    ]
+   },
+   "x": 250,
+   "y": 180
+  }
+ ],
+ "wires": [
+  {
+   "src": [
+    0,
+    0
+   ],
+   "dst": [
+    1,
+    0
+   ]
+  },
+  {
+   "src": [
+    4,
+    0
+   ],
+   "dst": [
+    1,
+    1
+   ]
+  },
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    1,
+    2
+   ]
+  },
+  {
+   "src": [
+    4,
+    0
+   ],
+   "dst": [
+    2,
+    0
+   ]
+  },
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    2,
+    1
+   ]
+  },
+  {
+   "src": [
+    1,
+    0
+   ],
+   "dst": [
+    2,
+    2
+   ]
+  },
+  {
+   "src": [
+    2,
+    0
+   ],
+   "dst": [
+    3,
+    0
+   ]
+  },
+  {
+   "src": [
+    3,
+    0
+   ],
+   "dst": [
+    4,
+    0
+   ]
+  },
+  {
+   "src": [
+    0,
+    0
+   ],
+   "dst": [
+    5,
+    0
+   ]
+  },
+  {
+   "src": [
+    4,
+    0
+   ],
+   "dst": [
+    5,
+    1
+   ]
+  }
+ ]
+}

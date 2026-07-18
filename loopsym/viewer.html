@@ -325,7 +325,8 @@
     <button id="btnCode">Python 코드</button>
     <button id="btnSave">저장</button>
     <button id="btnLoad">열기</button>
-    <button id="btnReset">초기 모델</button>
+    <button id="btnNew">새로 시작</button>
+    <button id="btnReset">되돌리기</button>
     <input type="file" id="fileLoad" accept=".json,application/json" hidden>
   </div>
 
@@ -1591,9 +1592,9 @@ async function initEngine() {
     } catch (e) { tried.push(u); }
   }
   if (!py)
-    throw new Error("Pyodide 로드 실패 (시도: " + tried.join(" → ") +
-      "). 인터넷이 없으면 로컬 서버로 여세요: python -m loopsym.server " +
-      "또는 python -m http.server (vendored 사본은 tools/vendor_pyodide.py).");
+    throw new Error("Pyodide 로드 실패 — 첫 실행은 인터넷(CDN)이 필요합니다. " +
+      "오프라인이면 터미널에서 `python -m loopsym.server` 를 실행한 뒤 " +
+      "이 페이지를 새로고침하세요 (Local Server 모드로 전환됩니다).");
   const src = await fetchEngineSources();
   py.FS.mkdirTree("/app/loopsym");
   for (const f in src) py.FS.writeFile("/app/loopsym/" + f, src[f]);
@@ -1943,7 +1944,13 @@ document.getElementById("btnReset").addEventListener("click", () => {
   model = JSON.parse(initialModel);
   nextId = 0;
   (function scanIds(m) { for (const b of m.blocks) { nextId = Math.max(nextId, b.id + 1); if (b.inner) scanIds(b.inner); } })(model);
-  counters = {}; path = []; select(null); status("초기 모델로 되돌렸습니다.", "");
+  counters = {}; path = []; select(null); status("처음 열었을 때의 모델로 되돌렸습니다.", "");
+});
+document.getElementById("btnNew").addEventListener("click", () => {
+  if (cur().blocks.length && !confirm("현재 다이어그램을 지우고 빈 캔버스에서 새로 시작할까요?\n(되돌리기 버튼으로 처음 모델로 복구할 수 있습니다)")) return;
+  model = { blocks: [], wires: [] };
+  nextId = 0; counters = {}; path = []; select(null);
+  status("빈 캔버스 — 왼쪽 팔레트에서 블록을 추가하세요.", "");
 });
 const dlg = document.getElementById("dlgCode");
 document.getElementById("btnCode").addEventListener("click", () => {

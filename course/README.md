@@ -32,6 +32,7 @@ tools/
 ## 학생 사용법 (주차별 동일)
 
 ```bash
+python -m pip install notebook pytest matplotlib   # 최초 1회 (수업 환경)
 cd course/week01
 jupyter notebook week01.ipynb     # 노트북 따라가며 *.py 의 TODO 를 채운다
 python -m pytest test_week01.py -q   # 전부 초록 = 이번 주 완료

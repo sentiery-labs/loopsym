@@ -1,7 +1,22 @@
 # Changelog
 
-## 0.1.1 (미발행 — 다음 릴리스에 포함)
+## 0.1.1 (빌드 완료 — PyPI 업로드 대기)
 
+UX 리뷰(docs/reviews/ux_review_codex.md) 대응 릴리스 — 골든 패스:
+`pip install loopsym` → `loopsym` → ▶ 실행 → Scope.
+
+- **인자 없는 `loopsym` = PI 데모** (연결 완료 + Scope). `--blank` 빈 캔버스,
+  `--example pi|pendulum|discrete_pi` 번들 예제, `--help` 에 모드 안내.
+- 번들 예제 JSON 3종을 패키지 데이터로 포함 (`loopsym/examples/*.json`,
+  정본 = `tools/gen_bundled_examples.py`, 회귀 기준값 재현 검증).
+- 뷰어: "새로 시작"(빈 캔버스) 버튼, "초기 모델" → "되돌리기" 개명,
+  오프라인 실패 시 복구 명령(`python -m loopsym.server`) 상태줄 안내.
+- `[project.urls]` (Repository/Issues/Changelog) 추가.
+- **wheel 설치 검증 CI** (`tools/check_wheel.py`) — 깨끗한 venv 에 wheel 을
+  설치해 CLI/`-m` 실행/버전/번들 데모 렌더/네이티브 시뮬 기준값을 검사.
+- README 개편: PyPI 3단계 빠른 시작(첫 실행 CDN 조건 명시), 소스 개발 절
+  분리(`[examples]` extra), 서버/오프라인 명령 정정, 데스크톱 전용(≥1024px)
+  명시, `examples/README.md` 카탈로그.
 - `loopsym.__version__` 추가 — `importlib.metadata.version("loopsym")` 기반
   (미설치 소스 트리/Pyodide 에서는 `"unknown"` 폴백).
 - **`loopsym` CLI** (`loopsym [model.json]`, `python -m loopsym`) — 뷰어를

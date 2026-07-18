@@ -28,3 +28,15 @@ jobs:
           python examples/ex2_pendulum_pyfunction.py
           python examples/ex3_subsystem.py
           python examples/ex4_discrete_pi.py
+
+  # 배포 wheel 검증 — "배포 ≠ 저장소" 방지 (UX 리뷰 차단 항목 5).
+  # sdist/wheel 을 빌드하고 별도 venv 에 wheel 을 설치해 CLI/데모/시뮬을 검사.
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python tools/check_wheel.py
