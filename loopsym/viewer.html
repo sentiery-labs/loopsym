@@ -886,9 +886,10 @@ function render() {
     const k = w.src[0] + ">" + w.dst[0];
     (bundles[k] = bundles[k] || []).push(wi);
   });
+  const opened = new Set(cm._open || []);       // 사용자가 '풀어 둔' 묶음 (저장됨)
   const inBundle = new Set();
   for (const k in bundles) {
-    if (bundles[k].length >= 3) bundles[k].forEach(wi => inBundle.add(wi));
+    if (bundles[k].length >= 3 && !opened.has(k)) bundles[k].forEach(wi => inBundle.add(wi));
     else delete bundles[k];
   }
 
@@ -1014,6 +1015,47 @@ function isDoubleTap(key) {
 function svgXY(ev) {
   const pt = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(svg.getScreenCTM().inverse());
   return [pt.x, pt.y];
+}
+
+/* ---------------- 줌 / 전체보기 ----------------
+ * 휠 = 커서 기준 확대/축소, Space = 전체 보기 (Simulink 의 fit).
+ * SVG viewBox 는 고정하고 엘리먼트 크기만 바꾼다 — svgXY 는 CTM 이라 자동 보정. */
+const CANVAS_W = 1600, CANVAS_H = 900;
+let zoom = 1;
+const canvasWrap = document.getElementById("bsCanvasWrap");
+function setZoom(z, ax, ay) {
+  z = Math.min(4, Math.max(0.15, z));
+  const r = canvasWrap.getBoundingClientRect();
+  ax = ax ?? r.width / 2; ay = ay ?? r.height / 2;
+  const dx = (canvasWrap.scrollLeft + ax) / zoom;   // 앵커의 도면 좌표
+  const dy = (canvasWrap.scrollTop + ay) / zoom;
+  zoom = z;
+  svg.setAttribute("width", CANVAS_W * z);
+  svg.setAttribute("height", CANVAS_H * z);
+  canvasWrap.scrollLeft = dx * z - ax;              // 앵커 화면 위치 유지
+  canvasWrap.scrollTop = dy * z - ay;
+}
+canvasWrap.addEventListener("wheel", ev => {
+  ev.preventDefault();
+  const r = canvasWrap.getBoundingClientRect();
+  setZoom(zoom * Math.pow(1.0015, -ev.deltaY),
+          ev.clientX - r.left, ev.clientY - r.top);
+}, { passive: false });
+
+function fitView() {
+  const cm = cur();
+  const r = canvasWrap.getBoundingClientRect();
+  if (!cm.blocks.length) { setZoom(1); canvasWrap.scrollLeft = canvasWrap.scrollTop = 0; return; }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of cm.blocks) {
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+    x1 = Math.max(x1, b.x + bW(b)); y1 = Math.max(y1, b.y + bH(b) + 20);
+  }
+  const pad = 40;
+  setZoom(Math.min((r.width - 2 * pad) / Math.max(x1 - x0, 1),
+                   (r.height - 2 * pad) / Math.max(y1 - y0, 1), 2));
+  canvasWrap.scrollLeft = (x0 + x1) / 2 * zoom - r.width / 2;
+  canvasWrap.scrollTop = (y0 + y1) / 2 * zoom - r.height / 2;
 }
 svg.addEventListener("pointerdown", ev => {
   const t = ev.target;
@@ -1177,6 +1219,7 @@ document.getElementById("btnFnCancel").addEventListener("click", () => { dlgFn.c
 document.addEventListener("keydown", ev => {
   if (/input|textarea/i.test(document.activeElement?.tagName || "")) return;
   if (ev.key === "Escape" && path.length) { navigateTo(path.length - 1); return; }
+  if (ev.key === " ") { ev.preventDefault(); fitView(); return; }   // Space = 전체 보기
   if (ev.key !== "Delete" && ev.key !== "Backspace") return;
   if (selection?.kind === "wire") { cur().wires.splice(selection.index, 1); select(null); }
   else if (selection?.kind === "bundle") {
@@ -1366,6 +1409,17 @@ function renderInspector() {
       rst.addEventListener("click", () => { delete w.pts; render(); });
       box.appendChild(rst);
     }
+    // 풀어 둔 묶음의 일원이면 다시 묶기 제공
+    const bk = w.src[0] + ">" + w.dst[0];
+    if ((cm._open || []).includes(bk)) {
+      const rb = document.createElement("button");
+      rb.textContent = "⊞ 다발로 다시 묶기";
+      rb.addEventListener("click", () => {
+        cm._open = cm._open.filter(x => x !== bk);
+        select(null);
+      });
+      box.appendChild(rb);
+    }
     const del = document.createElement("button");
     del.className = "danger"; del.textContent = "와이어 삭제";
     del.addEventListener("click", () => { cm.wires.splice(selection.index, 1); select(null); });
@@ -1381,6 +1435,13 @@ function renderInspector() {
     box.innerHTML = `<div class="hint mono">${sb?.name} ⇒ ${db?.name}  ×${ws.length}</div>
       <div class="hint">나란한 배선 묶음 (표시만 묶임 — 신호는 낱개 스칼라).<br>${
         ws.map(w => `y${w.src[1]}→u${w.dst[1]}`).join(", ")}</div>`;
+    const open = document.createElement("button");
+    open.textContent = "⊟ 낱개로 풀기";
+    open.addEventListener("click", () => {
+      cm._open = [...(cm._open || []), selection.key];
+      select(null);
+    });
+    box.appendChild(open);
     const del = document.createElement("button");
     del.className = "danger"; del.textContent = `묶음 전체 삭제 (×${ws.length})`;
     del.addEventListener("click", () => {
