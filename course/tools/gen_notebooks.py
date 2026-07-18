@@ -249,11 +249,13 @@ NB[7] = [
 
 VIEWER = lambda n: code(
     f"# 뷰어 열기 — 뼈대 모델을 브라우저에서 편집한다.\n"
-    f"# 완성하면 뷰어의 '저장' 으로 week{n:02d}_model.json 을 **덮어쓰기** (제출물!)\n"
+    f"# 완성하면 뷰어의 '저장' → week{n:02d}_model.json 이 다운로드된다.\n"
+    f"# 그 파일을 이 폴더의 같은 이름 파일에 **덮어쓰면 제출 완료** (채점 셀로 확인).\n"
     f"import sys, webbrowser; sys.path.insert(0, '../..')\n"
     f"from loopsym import load_json, render_html\n"
     f"p = render_html(load_json('week{n:02d}_model.json'), 'week{n:02d}_viewer.html',\n"
-    f"                title='{n}주차', t_end=8.0, dt=0.004)\n"
+    f"                title='{n}주차', t_end=8.0, dt=0.004,\n"
+    f"                save_name='week{n:02d}_model.json')\n"
     f"webbrowser.open('file://' + p)")
 
 RUNCHK = lambda n, T: code(

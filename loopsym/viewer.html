@@ -387,6 +387,8 @@ const EMBEDDED = /*__MODEL_JSON__*/null;
 // render_html(t_end=, dt=) 이 심는 시뮬레이션 기본값 — 모델의 이산 샘플타임과
 // 정합한 값 (예: 드론 체인은 dt=0.004). 없으면 툴바 기본값 유지.
 const SIM_DEFAULTS = /*__SIM_DEFAULTS__*/null;
+// render_html(save_name=) 이 심는 저장 파일명 (과제 제출용 — 주차 폴더에 덮어쓰기)
+const SAVE_NAME = /*__SAVE_NAME__*/null;
 if (SIM_DEFAULTS) {
   addEventListener("DOMContentLoaded", () => {
     document.getElementById("inTend").value = String(SIM_DEFAULTS.t_end);
@@ -1789,10 +1791,12 @@ document.getElementById("btnSave").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(model, null, 1)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "loopsym_model.json";
+  a.download = SAVE_NAME || "loopsym_model.json";
   a.click();
   URL.revokeObjectURL(a.href);
-  status("모델 JSON 을 내려받았습니다.", "ok");
+  status(SAVE_NAME
+    ? `${SAVE_NAME} 내려받음 — 주차 폴더의 같은 이름 파일에 덮어쓰면 제출 완료.`
+    : "모델 JSON 을 내려받았습니다.", "ok");
 });
 document.getElementById("btnLoad").addEventListener("click", () => document.getElementById("fileLoad").click());
 document.getElementById("fileLoad").addEventListener("change", async ev => {
