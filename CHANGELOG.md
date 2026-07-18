@@ -1,5 +1,16 @@
 # Changelog
 
+## 미발행 (0.1.2 후보)
+
+- **MavlinkHil 블록** (CLD-P41, fidelity Level 3 — 1단계 SITL): 실제 PX4
+  펌웨어(EKF2+commander+제어기)가 loopsym plant 를 비행. TCP 4560 lockstep,
+  HIL_SENSOR(250Hz)/HIL_GPS(10Hz) 합성(STALE 방지 잡음, home WMM 지자기),
+  가상 GCS arm/takeoff, SITL 자동기동+고아/디스크/로그 가드.
+  `pip install "loopsym[mavlink]"` (pymavlink). Pixhawk HITL(transport
+  serial)은 2단계 예약. 실측: 링크 100%, 이륙 2.51m 호버 PASS
+  (`examples/ex11_px4_sitl.py`).
+- QuadPlant `ground` 파라미터 — 지상 시동용 최소 지면 모델.
+
 ## 0.1.1 (빌드 완료 — PyPI 업로드 대기)
 
 UX 리뷰(docs/reviews/ux_review_codex.md) 대응 릴리스 — 골든 패스:

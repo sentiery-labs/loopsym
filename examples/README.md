@@ -18,6 +18,7 @@
 | ex8_imu_fidelity | IMU ideal↔noisy — "다이어그램은 하나" | ★★ | ~2s | 코어만 | HTML |
 | ex9_px4_whitebox | PX4 화이트박스 — 제어기/플랜트 안으로 (서브시스템) | ★★★ | ~5s | 코어만 | HTML |
 | ex10_joystick_fly | 게임패드 수동 비행 + 모드 전환 | ★★★ | 실시간 | `[server]` + 게임패드 | HTML + 라이브 |
+| ex11_px4_sitl | **진짜 PX4 펌웨어가 plant 를 비행** (MavlinkHil, lockstep) | ★★★★ | ~1분 | `[mavlink]` + PX4-Autopilot 빌드 | 판정 + HTML |
 
 권장 순서: ex1 → ex4 (엔진 개념) → ex7 → ex9 (드론 신호사슬) → ex8
 (센서/추정 동기) → ex5/ex10 (실시간/조종) → ex6 (미들웨어).

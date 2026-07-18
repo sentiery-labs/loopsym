@@ -563,6 +563,12 @@ const LIB = {
     defaults: { deadzone: 0.05, idle_thrust: 0.5, mode_btns: "0,1", st: 0.004 },
     pout: ["roll", "pitch", "yaw", "thrust", "mode"],
     summary: () => "RC mode 2" },
+  // PX4 SITL HIL 브리지 (loopsym.mavlink — 네이티브/서버 모드 전용, pymavlink)
+  MavlinkHil: { cat: "interfaces", tag: "PX4 HIL", nIn: () => 13, nOut: () => 4,
+    defaults: { st: 0.004, px4dir: "", autostart: true, takeoff_at: 20.0, transport: "sitl" },
+    pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD"],
+    pout: ["m1", "m2", "m3", "m4"],
+    summary: p => "실펌웨어 " + String(p.transport) },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
                     plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)", navigation: "var(--tag-sub)", interfaces: "var(--tag-disc)" };

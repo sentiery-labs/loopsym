@@ -55,6 +55,8 @@ _PARAMS = {
     "WaypointManager": ["waypoints", "radius", "st"],
     # 게임패드 (joystick.py)
     "Joystick": ["deadzone", "idle_thrust", "mode_btns", "st"],
+    # MAVLink HIL (mavlink.py, CLD-P41)
+    "MavlinkHil": ["st", "px4dir", "autostart", "takeoff_at", "transport"],
 }
 
 
@@ -193,12 +195,14 @@ def load_json(src):
                     from . import estimation as _estimation
                     from . import navigation as _navigation
                     from . import joystick as _joystick
+                    from . import mavlink as _mavlink
                     from .core import Block as _Block
                     cls = (getattr(_drone, cls_name, None)
                            or getattr(_sensors, cls_name, None)
                            or getattr(_estimation, cls_name, None)
                            or getattr(_navigation, cls_name, None)
-                           or getattr(_joystick, cls_name, None))
+                           or getattr(_joystick, cls_name, None)
+                           or getattr(_mavlink, cls_name, None))
                     if not (isinstance(cls, type) and issubclass(cls, _Block)):
                         cls = None
                 if cls is None:
@@ -224,7 +228,7 @@ def load_json(src):
 # (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
 _ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py",
                  "realtime.py", "ros2.py", "drone.py", "sensors.py", "estimation.py",
-                 "navigation.py", "joystick.py"]
+                 "navigation.py", "joystick.py", "mavlink.py"]
 
 
 def _engine_sources():

@@ -188,8 +188,9 @@ class QuadPlant(Block):
 
     def __init__(self, m=1.0, g=9.81, ixx=0.02, iyy=0.02, izz=0.04,
                  arm=0.25, c_m=0.06, roll0=0.0, pitch0=0.0, yaw0=0.0,
-                 z0=0.0, frame="quad_x", name=None):
+                 z0=0.0, frame="quad_x", ground=False, name=None):
         super().__init__(name)
+        self.ground = ground        # 지면 모델: pD≥0 에서 추력<mg 면 정지 (지상 시동용)
         if frame not in _FRAMES:
             raise ValueError(f"frame 은 {tuple(_FRAMES)} 중 하나: {frame!r}")
         geo = _FRAMES[frame]
@@ -216,6 +217,9 @@ class QuadPlant(Block):
         vel = x[10:13]
         f = [self.kF * _clip(ui, 0.0, 1.0) for ui in u]      # 모터 추력 [N]
         thrust = sum(f)
+        # ponytail: 지면 = '추력이 무게를 못 이기면 정지' 최소 모델 (착지 동역학 없음)
+        if self.ground and x[9] >= -1e-6 and thrust <= self.m * self.g:
+            return (0.0,) * 13
         tau = [sum(-self.arm * py * fi for py, fi in zip(self._py, f)),
                sum(self.arm * px * fi for px, fi in zip(self._px, f)),
                sum(self.c_m * s * fi for s, fi in zip(self._spin, f))]
