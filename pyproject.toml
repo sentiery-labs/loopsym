@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=61"]
+# >=64: PEP 660 editable install (build_editable 훅) — 61 이면 setup.py 없는
+# 프로젝트의 `pip install -e .` 가 구형 환경에서 실패한다 (Codex P41 판정 #1)
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]

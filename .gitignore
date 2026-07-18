@@ -16,3 +16,4 @@ loopsym/pyodide/
 
 # node (Pyodide 스모크 테스트용)
 node_modules/
+.venv*/

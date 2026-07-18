@@ -2,6 +2,11 @@
 
 ## 미발행 (0.1.2 후보)
 
+- **editable install 수정** — `[build-system] requires = ["setuptools>=64"]`
+  (PEP 660 `build_editable` 훅). 61 이면 setup.py 없는 이 프로젝트의
+  `pip install -e .` 가 구형 빌드 환경(Ubuntu 22.04 기본 pip 등)에서
+  실패했다 (Codex P41 판정 #1). 깨끗한 venv + pip 22.0.2 실측 통과.
+
 - **MavlinkHil 블록** (CLD-P41, fidelity Level 3 — 1단계 SITL): 실제 PX4
   펌웨어(EKF2+commander+제어기)가 loopsym plant 를 비행. TCP 4560 lockstep,
   HIL_SENSOR(250Hz)/HIL_GPS(10Hz) 합성(STALE 방지 잡음, home WMM 지자기),
