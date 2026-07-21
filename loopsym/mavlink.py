@@ -72,6 +72,29 @@ def synth_hil_sensor(q, omega, vel, vel_prev, p_down, st, g, rng):
     }
 
 
+def _git(px4dir, *args):
+    try:
+        r = subprocess.run(["git", "-C", px4dir, *args],
+                           capture_output=True, text=True, timeout=3)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _px4_version(px4dir):
+    """빌드된 소스트리의 펌웨어 버전+커밋해시 (best-effort — 실바이너리 기동 증거).
+
+    관객이 화면만 보고 '진짜 v1.16 펌웨어'임을 독립적으로 확인하는 근거 (C-6).
+    커밋해시는 rev-parse 로 항상 뽑는다 — HEAD 가 태그에 정확히 놓이면
+    `describe --tags` 는 해시를 떼어내 태그만 돌려주기 때문(해시 조용히 유실).
+    git 없거나 소스트리 아니면 빈 문자열."""
+    h = _git(px4dir, "rev-parse", "--short", "HEAD")
+    if not h:
+        return ""
+    tag = _git(px4dir, "describe", "--tags", "--always")
+    return f"{tag} ({h})" if tag and h not in tag else (tag or h)
+
+
 def _guard_and_launch_sitl(px4dir, log_path):
     """SITL 기동 + 고아/디스크 가드 (2026-07-04 38GB 사고 재발 방지)."""
     subprocess.run(["pkill", "-9", "-x", "px4"], stderr=subprocess.DEVNULL)
@@ -92,6 +115,9 @@ def _guard_and_launch_sitl(px4dir, log_path):
                             stdout=logf, stderr=subprocess.STDOUT,
                             start_new_session=True)
     atexit.register(_teardown_sitl)
+    ver = _px4_version(px4dir)
+    print(f"[PX4] 기동 — 실 SITL 바이너리 {px4bin} (PID {proc.pid})"
+          + (f", 펌웨어 {ver}" if ver else ""))
     return proc
 
 
@@ -200,6 +226,13 @@ class MavlinkHil(Block):
             self._gcs.mav.heartbeat_send(6, 8, 0, 4, 3)  # type=GCS (datalink 헬스)
             self._drain_gcs()
             self._check_log_growth()
+
+        if self._n_step % 250 == 0:                      # 1Hz(sim) 진행 표시 (콘솔 침묵 해소)
+            alt = -pos[2]
+            if self._armed_sent > 0:                     # 이륙 명령 후: 고도 로그 1s 간격
+                print(f"[PX4] 비행 t={t:.0f}s 고도 {alt:.2f}m")
+            elif self.takeoff_at and self._n_step % 1250 == 0:   # 정렬 대기: 5s 간격
+                print(f"[PX4] EKF 정렬 대기 t={t:.0f}s / {self.takeoff_at:.0f}s")
 
         # lockstep: HIL_ACTUATOR_CONTROLS 대기 (0.2s 타임아웃)
         m = self._conn.recv_match(type="HIL_ACTUATOR_CONTROLS",

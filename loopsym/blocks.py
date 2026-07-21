@@ -462,6 +462,11 @@ class Subsystem(Block):
                 continue
             for attr, val in list(vars(b).items()):
                 if isinstance(val, str) and val.startswith("$") and val[1:] in self.mask:
+                    # 원본 "$이름" 을 기억해 둔다 — 치환은 파괴적이므로, 이걸 남기지
+                    # 않으면 export_json 이 치환된 숫자만 내보내 JSON 라운드트립에서
+                    # 마스크 연결이 끊긴다 (뷰어에서 Kp 를 바꿔도 무효 변경이 됨).
+                    b._mask_refs = getattr(b, "_mask_refs", {})
+                    b._mask_refs[attr] = val
                     setattr(b, attr, self.mask[val[1:]])
                     if attr == "st":            # sample_time 별칭 동기화
                         b.sample_time = self.mask[val[1:]]

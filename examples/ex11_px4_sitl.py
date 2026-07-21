@@ -15,6 +15,7 @@ fidelity Level 3 의 1단계: 다이어그램의 '제어기 자리'에 실제 PX
 """
 
 import math
+import time
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -43,7 +44,9 @@ if __name__ == "__main__":
     bd, sc = build()
     hil = next(b for b in bd.blocks if isinstance(b, MavlinkHil))
     print(f"[ex11] {DUR:.0f}s lockstep (250Hz) — t=20s arm+takeoff …")
+    t_wall = time.monotonic()
     Simulator(bd).run(DUR, DT)
+    wall = time.monotonic() - t_wall
 
     tail = int(5.0 / DT)
     alt = [-v for v in sc.data[0][-tail:]]
@@ -61,8 +64,10 @@ if __name__ == "__main__":
     print(f" 자세 안정     : |qx|max {qx_max:.3f} {'PASS' if ok_att else 'FAIL'}")
     print(f" 결과: {'PASS' if ok_to and ok_att and ok_link else 'FAIL'} — "
           "실제 PX4 v1.16 펌웨어가 loopsym plant 를 비행")
+    print(f" {DUR:.0f}s 비행을 {wall:.1f}s 에 계산 (lockstep x{DUR/wall:.0f})")
     print("=================================================")
     here = os.path.dirname(os.path.abspath(__file__))
     print("뷰어:", render_html(bd, os.path.join(here, "ex11_diagram.html"),
-                              title="ex11 — PX4 SITL HIL", t_end=DUR, dt=DT))
+                              title="ex11 — PX4 SITL HIL", t_end=DUR, dt=DT,
+                              embed_scopes=True))
     sys.exit(0 if (ok_to and ok_att and ok_link) else 1)

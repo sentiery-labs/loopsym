@@ -130,6 +130,9 @@ def export_json(bd):
             params[p] = v
         if cls == "PyFunction" and b.expr is None:
             params["expr"] = None   # callable 은 뷰어에서 실행 불가 표시
+        for p, ref in getattr(b, "_mask_refs", {}).items():
+            if p in params:         # 마스크 원본 "$이름" 복원 (치환 값 대신) — 라운드트립 유지
+                params[p] = ref
         if cls == "Subsystem":
             params = dict(b.mask)   # 마스크 파라미터가 뷰어의 편집 대상
         entry = {
@@ -240,18 +243,47 @@ def _engine_sources():
     return out
 
 
+def _collect_scopes(bd, prefix=""):
+    """실행이 끝난 다이어그램의 Scope 표본을 뷰어 결과 형식으로 모은다.
+
+    반환: {time, signals:{경로:[[ch..]..]}, labels:{경로:[..]}} (webapi 결과와 동형).
+    브라우저에서 재실행할 수 없는 모델(MavlinkHil 등)의 HTML 에 '방금 실행'의
+    파형을 그대로 심어, 열면 바로 보이게 한다."""
+    from .blocks import Scope, Subsystem
+    scopes = {"time": [], "signals": {}, "labels": {}}
+    for b in bd.blocks:
+        if isinstance(b, Subsystem):
+            inner = _collect_scopes(b.inner, prefix + b.name + "/")
+            scopes["signals"].update(inner["signals"])
+            scopes["labels"].update(inner["labels"])
+            if inner["time"] and not scopes["time"]:
+                scopes["time"] = inner["time"]
+        elif isinstance(b, Scope) and any(b.data):
+            disp = prefix + b.name
+            scopes["signals"][disp] = [list(ch) for ch in b.data]
+            scopes["labels"][disp] = list(b.labels)
+            if not scopes["time"]:
+                scopes["time"] = list(b.t)
+    return scopes
+
+
 def render_html(bd, path, title="loopsym viewer", t_end=None, dt=None,
-                save_name=None):
+                save_name=None, embed_scopes=False):
     """모델을 심은 단독 HTML 파일을 만든다. 반환: 절대 경로.
 
     t_end/dt 를 주면 뷰어 툴바 기본값으로 심는다 — dt 는 모델의 이산
     샘플타임의 약수여야 실행이 된다 (예: 드론 체인은 dt=0.004).
-    save_name 을 주면 뷰어 '저장' 이 그 파일명으로 내려받는다 (과제 제출용)."""
+    save_name 을 주면 뷰어 '저장' 이 그 파일명으로 내려받는다 (과제 제출용).
+    embed_scopes 면 이미 실행된 bd 의 Scope 표본을 심어, HTML 을 열면 바로
+    파형이 보인다 (브라우저 재실행 불가한 MavlinkHil 모델용)."""
     template = os.path.join(os.path.dirname(__file__), "viewer.html")
     with open(template, encoding="utf-8") as f:
         html = f.read()
     model = json.dumps(export_json(bd), ensure_ascii=False)
     html = html.replace("/*__MODEL_JSON__*/null", model)
+    if embed_scopes:
+        scopes = json.dumps(_collect_scopes(bd), ensure_ascii=False)
+        html = html.replace("/*__SCOPES_JSON__*/null", scopes)
     if t_end is not None or dt is not None:
         defaults = {"t_end": t_end if t_end is not None else 10.0,
                     "dt": dt if dt is not None else 0.01}

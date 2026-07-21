@@ -411,6 +411,9 @@ if (SIM_DEFAULTS) {
 // render_html() 이 파이썬 엔진 소스를 심는 자리 ({파일명: 소스}). 원본
 // viewer.html 을 직접 열면 null — 이때는 옆의 .py 파일을 fetch 한다 (HTTP 서빙 필요).
 const BLOCKSIM_SRC = /*__BLOCKSIM_SRC__*/null;
+// render_html(embed_scopes=True) 이 심는 '방금 실행'의 Scope 표본 (webapi 결과 동형).
+// 브라우저에서 재실행 불가한 모델(MavlinkHil)의 HTML 을 열면 바로 파형이 보인다.
+const EMBEDDED_SCOPES = /*__SCOPES_JSON__*/null;
 
 /* ---------------- 블록 메타데이터 (팔레트/포트 수/기본값 — blocks.py 와 대응) ---------------- */
 const countIO = (b, type) => b.inner ? b.inner.blocks.filter(x => x.type === type).length : 0;
@@ -1743,10 +1746,20 @@ const toScopeCards = res => Object.keys(res.signals).map(disp => ({
   disp, labels: res.labels[disp] || [], t: res.time, data: res.signals[disp],
 }));
 
+const hasBlockType = (m, type) =>
+  m.blocks.some(b => b.type === type || (b.inner && hasBlockType(b.inner, type)));
+
 let simBusy = false;
 async function runSim() {
   if (simBusy) return;
   const btn = document.getElementById("btnRun");
+  // MavlinkHil: 실기체/SITL 연동 전용 — 브라우저(Pyodide)엔 pymavlink 도 실펌웨어도
+  // 없다. Pyodide 오류를 내는 대신 안내만 한다 (파형은 이미 심겨 표시됨).
+  if (hasBlockType(model, "MavlinkHil")) {
+    status("이 다이어그램은 실기체/SITL 연동용입니다 — 브라우저에서 재실행할 수 "
+      + "없습니다. 아래 파형은 방금 실행한 PX4 SITL 비행 결과입니다.", "err");
+    return;
+  }
   try {
     simBusy = true;
     fixModel(model);
@@ -2051,5 +2064,7 @@ new MutationObserver(() => lastScopes && drawScopes(lastScopes))
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => lastScopes && drawScopes(lastScopes));
 
 render();
+// render_html(embed_scopes=True) 이 심은 '방금 실행'의 파형을 열자마자 표시
+if (EMBEDDED_SCOPES) drawScopes(toScopeCards(EMBEDDED_SCOPES));
 tryServer();   // 로컬 서버가 있으면 자동 감지 — 없으면 Pyodide 모드 유지
 </script>
