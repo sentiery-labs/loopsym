@@ -207,6 +207,7 @@
   #bsSvg .wire.sel { stroke: var(--accent); stroke-width: 3; }
   #bsSvg .wire.bundle { stroke-width: 3.6; }
   #bsSvg .wire.bundle.sel { stroke-width: 4.6; }
+  #bsSvg .wiredot { fill: var(--wire); pointer-events: none; }
   #bsSvg .buslash { stroke: var(--wire); stroke-width: 1.4; pointer-events: none; }
   #bsSvg .busstub { stroke: var(--wire); stroke-width: 1.1; fill: none; pointer-events: none; opacity: .8; }
   #bsSvg .buslbl {
@@ -763,6 +764,46 @@ function autoRoute(x1, y1, x2, y2, rects) {
   for (const my of cands) if (!polyHits(u(my), rects)) return tidyPoly(u(my));
   return u(base);
 }
+function ptOnSeg(p, a, b) {         // 점 p 가 직교 세그먼트 a-b 위에 있는가
+  if (a[0] === b[0] && p[0] === a[0])
+    return p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
+  if (a[1] === b[1] && p[1] === a[1])
+    return p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]);
+  return false;
+}
+function ptOnPoly(p, poly) {
+  for (let i = 0; i < poly.length - 1; i++)
+    if (ptOnSeg(p, poly[i], poly[i + 1])) return true;
+  return false;
+}
+function branchDots(groups) {
+  // 같은 출력 포트를 공유하는 폴리라인 묶음 {key: [poly,...]} 에서 갈라지는
+  // 지점(Simulink 의 분기 ●)을 계산. ponytail: 꼭짓점 기준 판정 — 분기 생성이
+  // 잡은 지점을 꼭짓점으로 저장하므로 실제 분기점은 항상 꼭짓점이다.
+  const dots = [], seen = new Set();
+  for (const key in groups) {
+    const polys = groups[key];
+    if (polys.length < 2) continue;
+    for (const a of polys) for (const b of polys) {
+      if (a === b) continue;
+      // 끝(목적지)에서 소스 쪽으로 걸으며 b 위에 있는 첫 꼭짓점 = 공유 구간의 끝
+      for (let k = a.length - 2; k >= 1; k--) {
+        const v = a[k];
+        if (!ptOnPoly(v, b)) continue;
+        // v 에서 다음 꼭짓점 방향으로 1px 나간 점이 b 를 벗어나야 진짜 분기
+        // (같이 도는 공유 코너는 제외)
+        const n = a[k + 1];
+        const e = [v[0] + Math.sign(n[0] - v[0]), v[1] + Math.sign(n[1] - v[1])];
+        if (!ptOnPoly(e, b)) {
+          const dk = v[0] + "," + v[1];
+          if (!seen.has(dk)) { seen.add(dk); dots.push(v); }
+        }
+        break;
+      }
+    }
+  }
+  return dots;
+}
 /*ROUTING-END*/
 const polyPath = poly => poly.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
 function wirePoly(cm, w, sb, db) {
@@ -940,11 +981,13 @@ function render() {
     else delete bundles[k];
   }
 
+  const srcGroups = {};              // 출력 포트별 폴리라인 — 분기점(●) 계산용
   cm.wires.forEach((w, wi) => {
     if (inBundle.has(wi)) return;                 // 번들은 아래에서 대표선 하나로
     const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
     if (!sb || !db) return;
     const poly = wirePoly(cm, w, sb, db);
+    (srcGroups[w.src[0] + ":" + w.src[1]] ||= []).push(poly);
     el("path", { d: polyPath(poly), class: "wire" + (selection?.kind === "wire" && selection.index === wi ? " sel" : ""), "data-wire": wi }, svg);
     // 세그먼트별 히트 경로 — 가운데 세그먼트는 드래그로 배선 조정
     for (let s = 0; s < poly.length - 1; s++) {
@@ -954,6 +997,9 @@ function render() {
                    class: cls, "data-wire": wi, "data-seg": s }, svg);
     }
   });
+  // 분기점 ● — 같은 출력에서 갈라진 와이어 (Simulink 의 선 공유 표시)
+  for (const [dx2, dy2] of branchDots(srcGroups))
+    el("circle", { class: "wiredot", cx: dx2, cy: dy2, r: 3.2 }, svg);
 
   for (const k in bundles) {
     const idxs = bundles[k];
@@ -1151,8 +1197,24 @@ svg.addEventListener("pointerdown", ev => {
       select({ kind: "bundle", key: k, indices: idxs });
     } else if (t.dataset.wire !== undefined) {
       // 클릭 = 선택, 가운데 세그먼트 드래그 = 배선 조정, 더블클릭 = 자동 배선 리셋
+      // Ctrl+드래그 = 분기 — 잡은 지점까지의 경로를 물려받아 새 와이어 시작
       const wi = +t.dataset.wire;
       const w = cm.wires[wi];
+      if (ev.ctrlKey || ev.metaKey) {
+        const sb = cm.blocks.find(b => b.id === w.src[0]), db = cm.blocks.find(b => b.id === w.dst[0]);
+        const poly = wirePoly(cm, w, sb, db);
+        const s = +(t.dataset.seg ?? 0);
+        const [a, b2] = [poly[s], poly[s + 1]];
+        const cl = (v, p, q) => Math.max(Math.min(p, q), Math.min(Math.max(p, q), v));
+        const gp = a[0] === b2[0]
+          ? [a[0], cl(Math.round(my / 10) * 10, a[1], b2[1])]     // 세로 세그 위 스냅
+          : [cl(Math.round(mx / 10) * 10, a[0], b2[0]), a[1]];    // 가로 세그 위 스냅
+        drag = { kind: "wire", srcId: w.src[0], srcPort: w.src[1],
+                 trunk: [...poly.slice(1, s + 1).map(p => p.slice()), gp],
+                 path: el("path", { class: "tmpwire" }, svg) };
+        svg.setPointerCapture(ev.pointerId);
+        return;
+      }
       if (isDoubleTap("w" + wi)) {
         if (w?.pts) { delete w.pts; render(); status("자동 배선으로 리셋했습니다.", ""); }
         return;
@@ -1180,8 +1242,9 @@ svg.addEventListener("pointermove", ev => {
     }
     render();
   } else if (drag.kind === "wire") {
-    const sb = blk(drag.srcId);
-    const [x1, y1] = outPos(sb, drag.srcPort);
+    // 분기 드래그는 트렁크 끝(잡은 지점)에서 출발 — 트렁크는 기존 선과 겹친다
+    const [x1, y1] = drag.trunk ? drag.trunk[drag.trunk.length - 1]
+                                : outPos(blk(drag.srcId), drag.srcPort);
     if (!drag.path.isConnected) svg.appendChild(drag.path);
     drag.path.setAttribute("d", polyPath(autoRoute(x1, y1, mx, my, [])));
   } else if (drag.kind === "wireseg") {
@@ -1209,7 +1272,18 @@ svg.addEventListener("pointerup", ev => {
       const dstId = +t.dataset.blk, dstPort = +t.dataset.in;
       const old = cm.wires.findIndex(w => w.dst[0] === dstId && w.dst[1] === dstPort);
       if (old >= 0) { cm.wires.splice(old, 1); status("기존 연결을 대체했습니다.", ""); }
-      cm.wires.push({ src: [drag.srcId, drag.srcPort], dst: [dstId, dstPort] });
+      const nw = { src: [drag.srcId, drag.srcPort], dst: [dstId, dstPort] };
+      if (drag.trunk) {
+        // 분기: 공유 트렁크 + 잡은 지점부터의 자동 배선을 수동 꼭짓점으로 저장
+        // → 트렁크가 부모 선과 정확히 겹쳐 한 줄로 보인다 (JSON pts 로 보존)
+        const db = cm.blocks.find(b => b.id === dstId);
+        const [gx, gy] = drag.trunk[drag.trunk.length - 1];
+        const [ix, iy] = inPos(db, dstPort);
+        const rects = cm.blocks.filter(b => b.id !== drag.srcId && b !== db)
+          .map(b => [b.x - 8, b.y - 8, bW(b) + 16, bH(b) + 16]);
+        nw.pts = [...drag.trunk, ...autoRoute(gx, gy, ix, iy, rects).slice(1, -1)];
+      }
+      cm.wires.push(nw);
     }
     drag.path.remove();
   } else if (drag?.kind === "wireseg") {
@@ -1447,7 +1521,7 @@ function addBlock(type) {
 function renderInspector() {
   const box = document.getElementById("bsInspBody");
   box.className = "";
-  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· <b>와이어 가운데 세그먼트 드래그 → 배선 조정</b> (더블클릭 → 자동 배선)<br>· <b>PyFunction 더블클릭 → 코드 편집기</b> (여러 줄 문장 지원)<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
+  const help = "블록이나 와이어를 선택하세요.<br><br>· 팔레트 클릭 → 블록 추가<br>· 출력 포트를 드래그해 입력 포트에 연결<br>· <b>와이어 가운데 세그먼트 드래그 → 배선 조정</b> (더블클릭 → 자동 배선)<br>· <b>와이어 위 Ctrl+드래그 → 분기</b> (한 출력을 여러 입력으로)<br>· <b>PyFunction 더블클릭 → 코드 편집기</b> (여러 줄 문장 지원)<br>· Shift+클릭 → 다중 선택 → 서브시스템으로 묶기<br>· 서브시스템 더블클릭 → 내부 열기 (Esc 로 위로)<br>· Delete 키 → 선택 삭제";
   if (!selection) { box.className = "empty-note"; box.innerHTML = help; return; }
   box.innerHTML = "";
   if (selection.kind === "wire") {

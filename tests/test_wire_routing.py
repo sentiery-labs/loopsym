@@ -53,6 +53,16 @@ ok(h[0][0] === 0 && h[h.length-1][0] === 120 && h[h.length-1][1] === 90, "heal �
 const t = tidyPoly([[0,0],[50,0],[80,0],[80,60],[80,60],[120,60]]);
 ok(JSON.stringify(t) === JSON.stringify([[0,0],[80,0],[80,60],[120,60]]), "tidy 병합: " + JSON.stringify(t));
 
+// 5) 분기점: 트렁크를 공유하다 갈라지는 지점 하나 (공유 코너는 제외)
+const dots = branchDots({ s: [
+  [[0,0],[100,0],[100,80],[200,80]],     // 부모
+  [[0,0],[100,0],[100,40],[200,40]],     // 자식: 세로 세그 중간 (100,40) 에서 분기
+]});
+ok(JSON.stringify(dots) === JSON.stringify([[100,40]]), "분기점: " + JSON.stringify(dots));
+
+// 6) 와이어 하나뿐인 출력 → 분기점 없음
+ok(branchDots({ s: [[[0,0],[100,0]]] }).length === 0, "단일 와이어 분기점 없음");
+
 console.log("ok");
 """
 
