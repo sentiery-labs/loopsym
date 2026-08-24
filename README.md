@@ -20,12 +20,16 @@ loopsym            # PI 폐루프 데모가 로드된 뷰어가 앱 창으로 �
                    # → ▶ 실행 → 아래 Scope 에 ref/y 두 채널 표시
 ```
 
+![loopsym 뷰어 — PI 폐루프 데모](ex_loopsym_example.png)
+
 - **첫 실행은 인터넷이 필요합니다** — 브라우저가 Pyodide(파이썬 런타임)를
   CDN 에서 내려받습니다 (수 초, 이후 캐시). 오프라인이면 상태줄 안내대로
   `python -m loopsym.server` 를 켜고 새로고침하면 됩니다 (`[server]` extra 필요).
 - 다른 시작점: `loopsym --blank` (빈 캔버스), `loopsym --example pendulum`
   (번들 예제: pi·pendulum·discrete_pi), `loopsym my_model.json` (저장한 모델).
   `loopsym --help` 가 전체 형태를 설명합니다.
+
+![loopsym 뷰어 — 빈 캔버스 (--blank)](ex_loopsym_blank.png)
 
 파이썬 코드로 직접 만들 수도 있습니다 (설치만으로 동작, 의존성 0):
 
