@@ -9,7 +9,7 @@ name = "loopsym"
 version = "0.1.1"
 description = "Visual block-diagram simulation for control systems and robotics"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Sentiery" }]
 keywords = ["simulation", "block-diagram", "control-systems", "drone", "education", "px4"]
