@@ -4,6 +4,7 @@
 클라이언트(뷰어의 서버 모드와 같은 프로토콜)로:
   1. ex1~ex4 회귀 — 결과가 네이티브 엔진(= Pyodide 모드와 동일 코드)과 일치
   2. 시뮬레이션 중 stop 이 1초 안에 반영
+  3. 접속 키·출처 검사 — 키 없는 접속과 다른 웹사이트 출처는 거부
 을 확인한다. fastapi/uvicorn/websockets 없으면 skip.
 """
 
@@ -22,21 +23,26 @@ ws_sync = pytest.importorskip("websockets.sync.client")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from loopsym import Scope, export_json, run          # noqa: E402
+from loopsym import Scope, export_json, render_html, run   # noqa: E402
+from loopsym.auth import server_key                   # noqa: E402
 from tests.test_pyodide_smoke import CASES            # noqa: E402  (ex1~ex4 모델 공유)
 
+ws_exc = pytest.importorskip("websockets.exceptions")
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REJECTED = 4403        # 서버가 키/출처 검사에서 끊을 때 쓰는 close code
 
 
 @pytest.fixture(scope="module")
 def server():
+    """뷰어처럼 접속 키를 붙인 URL 을 돌려준다."""
     with socket.socket() as s:                 # 빈 포트 확보
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
     proc = subprocess.Popen(
         [sys.executable, "-m", "loopsym.server", "--port", str(port)],
         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    url = f"ws://127.0.0.1:{port}/ws"
+    url = f"ws://127.0.0.1:{port}/ws?key={server_key()}"
     try:
         for _ in range(100):                   # 기동 대기 (최대 10s)
             try:
@@ -124,3 +130,61 @@ def test_server_rejects_bad_model(server):
             if m["type"] != "progress":
                 break
     assert m["type"] == "error" and "연결되지 않음" in m["message"]
+
+
+# ---------------------------------------------------------------- 접속 키·출처
+def _close_code(url, origin=None):
+    """접속해서 run 을 보내 본다. 서버가 끊으면 close code, 아니면 None."""
+    bd, t_end, dt = CASES["ex1"][0]()
+    try:
+        with ws_sync.connect(url, origin=origin, open_timeout=5) as ws:
+            ws.send(json.dumps({"cmd": "run", "diagram": export_json(bd),
+                                "t_end": 0.1, "dt": dt}))
+            while True:
+                m = json.loads(ws.recv(timeout=10))
+                if m["type"] in ("done", "error"):
+                    return None
+    except ws_exc.ConnectionClosed as e:
+        return e.rcvd.code if e.rcvd else None
+
+
+def test_server_rejects_connection_without_key(server):
+    """키 없는 접속(다른 웹사이트가 ws://localhost 로 붙는 경우)은 끊는다."""
+    base = server.split("?")[0]
+    assert _close_code(base) == REJECTED
+    assert _close_code(base + "?key=wrong") == REJECTED
+
+
+def test_server_rejects_foreign_origin_even_with_key(server):
+    """키가 새어 나가도 다른 웹사이트 출처에서는 실행하지 않는다."""
+    assert _close_code(server, origin="https://evil.example") == REJECTED
+
+
+def test_server_accepts_viewer_with_key(server):
+    """키를 가진 file:// 뷰어(Origin null)와 localhost 페이지는 그대로 동작한다."""
+    assert _close_code(server, origin="null") is None
+    assert _close_code(server, origin="http://localhost:8000") is None
+
+
+def test_render_html_embeds_server_key(tmp_path):
+    """render_html 로 만든 뷰어에 서버 접속 키가 심어진다."""
+    bd, _, _ = CASES["ex1"][0]()
+    html = open(render_html(bd, str(tmp_path / "v.html")), encoding="utf-8").read()
+    assert server_key() in html
+
+
+def test_render_html_keeps_embedded_engine_sources_intact(tmp_path):
+    """키 치환이 뷰어에 심은 엔진 소스(viz.py 안의 표식 문자열)까지 건드리면
+    JS 가 깨진다 — 심은 소스가 원본 파일과 글자 그대로 같아야 한다."""
+    import re
+    import loopsym.viz as viz
+    bd, _, _ = CASES["ex1"][0]()
+    html = open(render_html(bd, str(tmp_path / "v.html")), encoding="utf-8").read()
+    m = re.search(r"const BLOCKSIM_SRC = (\{.*?\});\n", html, re.S)
+    assert m, "BLOCKSIM_SRC 를 찾지 못함"
+    try:
+        src = json.loads(m.group(1))
+    except ValueError as e:
+        pytest.fail(f"심은 엔진 소스 JSON 이 깨짐: {e}")
+    with open(viz.__file__, encoding="utf-8") as f:
+        assert src["viz.py"] == f.read()

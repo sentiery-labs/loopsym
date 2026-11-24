@@ -480,6 +480,8 @@ const LIB = {
     defaults: { st: 0.01, x0: 0.0 }, summary: p => `Ts=${p.st}` },
   DiscreteTransferFunction: { cat: "discrete", tag: "dtf", nIn: () => 1, nOut: () => 1,
     defaults: { num: [1], den: [1, -0.5], st: 0.01 }, summary: p => `Ts=${p.st}` },
+  ZeroOrderHold: { cat: "discrete", tag: "zoh", nIn: () => 1, nOut: () => 1,
+    defaults: { st: 0.01 }, summary: p => `Ts=${p.st}` },
   Mux: { cat: "math", tag: "mux", nIn: b => b.params.n_in | 0, nOut: () => 1,
     defaults: { n_in: 2 }, summary: () => "" },
   Demux: { cat: "math", tag: "demux", nIn: () => 1, nOut: b => b.params.n_out | 0,
@@ -630,7 +632,7 @@ function bW(b) {
   switch (b.type) {
     case "Gain": return 84;
     case "Sum": case "Product": return 56;
-    case "Integrator": case "UnitDelay": return 68;
+    case "Integrator": case "UnitDelay": case "ZeroOrderHold": return 68;
     case "DiscreteIntegrator": return 84;
     case "Constant": return 84;
     case "Step": case "Sine": case "Saturation": return 88;
@@ -648,7 +650,7 @@ function bH(b) {
     case "Inport": case "Outport": return 34;
     case "Gain": return 56;
     case "Integrator": case "Constant": case "UnitDelay": return 52;
-    case "DiscreteIntegrator": return 56;
+    case "DiscreteIntegrator": case "ZeroOrderHold": return 56;
     case "DiscreteTransferFunction": return 68;
     case "Mux": case "Demux": return Math.max(56, 20 * np + 12);
     case "Subsystem": return Math.max(72, 26 * np + 22);
@@ -853,6 +855,16 @@ function drawShape(g, b) {
       rect();
       txt(g, { class: "bcenter", x: cx, y: cy + 5, "font-size": 14 }, "z⁻¹");
       break;
+    case "ZeroOrderHold": {      // Simulink 식 계단 아이콘 + Ts
+      rect();
+      const x0 = b.x + 14, sw = (w - 28) / 3, yb = cy + 4, sh = 7;
+      const pts = [];
+      for (let i = 0; i < 3; i++)
+        pts.push(`${x0 + i * sw},${yb - i * sh}`, `${x0 + (i + 1) * sw},${yb - i * sh}`);
+      el("polyline", { points: pts.join(" "), fill: "none", stroke: "var(--ink)", "stroke-width": 1.4 }, g);
+      summary(`Ts=${fmtNum(b.params.st)}`);
+      break;
+    }
     case "DiscreteIntegrator":   // 전진 오일러: Ts/(z-1) 분수 표기
       rect();
       txt(g, { class: "bcenter", x: cx, y: cy - 4, "font-size": 11.5 }, `Ts=${fmtNum(b.params.st)}`);
@@ -1761,7 +1773,11 @@ function engine() {
  * 페이지 로드 때 ws://localhost:8765 접속을 시도한다. 성공하면 서버 모드
  * (시뮬레이션이 로컬 파이썬 프로세스에서 돌고 결과가 스트리밍됨), 실패하면
  * 사용자 개입 없이 Pyodide 모드. 프로토콜은 loopsym/server.py 참조. */
-const SERVER_URL = "ws://localhost:8765/ws";
+// 접속 키: render_html 이 심는다 (loopsym/auth.py). 원본 viewer.html 을 직접 열면
+// 키가 없어 서버가 4403 으로 거부한다 → 안내 후 Pyodide 모드 유지.
+const SERVER_KEY = /*__SERVER_KEY__*/null;
+const SERVER_URL = "ws://localhost:8765/ws" +
+  (SERVER_KEY ? "?key=" + encodeURIComponent(SERVER_KEY) : "");
 let serverWs = null;      // 열린 연결 (null = Pyodide 모드)
 let serverRun = null;     // 진행 중 실행 {accum, lastDraw, resolve, reject}
 
@@ -1775,7 +1791,10 @@ function tryServer() {
   let ws;
   try { ws = new WebSocket(SERVER_URL); } catch { return; }
   ws.onopen = () => { serverWs = ws; setMode(); };
-  ws.onclose = () => {
+  ws.onclose = ev => {
+    if (ev.code === 4403)
+      status("로컬 서버가 이 뷰어를 거부했습니다 — 서버 접속 키가 다릅니다. " +
+        "loopsym 또는 render_html 로 뷰어를 다시 만들면 붙습니다. (지금은 Pyodide 모드)", "err");
     if (serverWs === ws) {
       serverWs = null; setMode();
       if (serverRun) serverRun.reject(new Error("로컬 서버 연결이 끊겼습니다 — Pyodide 모드로 전환됨"));

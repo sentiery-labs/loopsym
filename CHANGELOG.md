@@ -2,6 +2,31 @@
 
 ## 미발행 (0.1.2 후보)
 
+- **파이썬 최소 버전 3.10** — 3.9 는 2025-10 지원 종료이고, GitHub Actions
+  ubuntu-latest(26.04)에서 3.9 를 더 이상 받을 수 없어 CI 가 설치 단계에서
+  실패했다. CI 매트릭스 3.10/3.12, `requires-python = ">=3.10"`
+  (Ubuntu 22.04 기본 파이썬 = 3.10).
+- **샘플 시간 규칙 수정** — `sample_time` 이 있는 블록은 자기 샘플 시점의
+  major step 에서만 출력을 계산하고 그 사이에는 유지한다(ZOH). 이전에는
+  st > dt 일 때 이산 출력이 st 가 아니라 한 base step 뒤에 바뀌어 지연이 작게
+  나왔고, PID·RateController 같은 feedthrough 이산 블록이 RK4 minor step 마다
+  다시 계산됐다. 단일레이트(st = dt)의 비-feedthrough 이산 블록 결과는 그대로
+  (회귀 기준값 ex1~ex4 불변). `tests/test_sampling.py`.
+- **ZeroOrderHold 블록** — 연속 신호를 디지털 제어기로 넘기는 샘플러(뷰어
+  팔레트 Continuous/Discrete). ex4 이산 PI 를 오차 ZOH 샘플링으로 바꿔 P·I 모두
+  샘플링되는 진짜 디지털 PI 로 — 독립 샘플데이터 기준해와 1e-6 안에서 일치
+  (Ts=1.0 에서 진동이 남는 것까지). ex9 화이트박스는 Position/Rate 입력에 ZOH
+  를 달아 ex7 한 덩어리 제어기와 궤적 일치(1e-9)를 유지.
+- **로컬 서버 접속 키·출처 검사 (보안)** — 서버 모드는 PyFunction 코드를
+  실행하는데(`__builtins__={}` 는 우회 가능 — 보안 경계 아님), 서버가 아무
+  접속이나 받아서 서버를 켜 둔 동안 방문한 웹페이지가 ws://localhost:8765 로
+  코드를 보낼 수 있었다. 이제 `~/.loopsym/server_key` 의 키(render_html 이
+  뷰어에 심음)와 Origin(file:// 뷰어·localhost)이 맞아야 받고, 아니면 close
+  4403. `python -m loopsym.server --new-key` 로 키 교체. `loopsym/auth.py`.
+- **render_html 표식 치환 순서** — `__TITLE__` 치환이 엔진 소스 주입 뒤에
+  돌아서 뷰어에 심은 viz.py 까지 바꿨다(제목에 `"` 가 있으면 JS 가 깨짐).
+  모든 표식 치환을 소스 주입 전에 하고, 심은 소스가 원본과 같은지 테스트.
+
 - **editable install 수정** — `[build-system] requires = ["setuptools>=64"]`
   (PEP 660 `build_editable` 훅). 61 이면 setup.py 없는 이 프로젝트의
   `pip install -e .` 가 구형 빌드 환경(Ubuntu 22.04 기본 pip 등)에서

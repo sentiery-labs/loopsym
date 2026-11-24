@@ -11,7 +11,7 @@ from .blocks import (
     Constant, Step, Sine,
     Gain, Sum, Product, Saturation, PyFunction,
     Integrator, TransferFunction,
-    UnitDelay, DiscreteIntegrator, DiscreteTransferFunction,
+    UnitDelay, DiscreteIntegrator, DiscreteTransferFunction, ZeroOrderHold,
     Mux, Demux,
     Inport, Outport, Subsystem,
     Scope,

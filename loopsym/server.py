@@ -8,6 +8,11 @@
 Pyodide 모드로 자동 폴백한다. HILS(실제 Pixhawk)와 실시간 러너(P42)는
 브라우저 샌드박스 밖이 필요하므로 이 모드에서만 동작한다.
 
+접속 검사 (loopsym/auth.py):
+  ws://localhost:8765/ws?key=<서버 키>  — 키가 맞고 출처(Origin)가 file:// 뷰어나
+  localhost 페이지일 때만 받는다. 아니면 close code 4403 으로 끊는다. 이 서버는
+  다이어그램의 PyFunction 코드를 실행하므로, 아무 웹사이트나 붙게 두면 안 된다.
+
 프로토콜 (WebSocket, JSON):
   client→server: {"cmd": "run", "diagram": {...}, "t_end": 10, "dt": 0.004,
                   "mode": "sim" | "realtime"}          # 기본 "sim"
@@ -43,6 +48,7 @@ import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
+from .auth import key_ok, new_server_key, origin_ok, server_key
 from .realtime import JitterMeter, Pacer
 from .sim import Simulator
 from .viz import load_json
@@ -50,6 +56,7 @@ from .webapi import MAX_STEPS, _scope_paths
 
 CHUNK_WALL_S = 0.1      # 청크 전송 주기 (wall clock) ≈ 10Hz
 QUEUE_SIZE = 64         # 넘치면 오래된 청크부터 버린다
+REJECTED = 4403         # 키/출처 검사 실패 close code (뷰어가 안내 문구를 띄운다)
 
 app = FastAPI(title="loopsym local server")
 
@@ -154,6 +161,11 @@ async def _pump(ws, out_q):
 
 async def _handle(ws):
     await ws.accept()
+    # 받기 전에 검사 — 통과 못 하면 어떤 명령도 읽지 않고 끊는다.
+    # (accept 후 close 해야 뷰어가 4403 을 보고 '키가 다름' 안내를 띄울 수 있다)
+    if not (origin_ok(ws.headers.get("origin")) and key_ok(ws.query_params.get("key"))):
+        await ws.close(code=REJECTED, reason="loopsym: server key or origin rejected")
+        return
     stop_evt = None
     pump_task = None
     joy_state = None
@@ -210,8 +222,16 @@ def main():
     ap = argparse.ArgumentParser(description="loopsym 로컬 서버 (뷰어가 자동 감지)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--new-key", action="store_true",
+                    help="접속 키를 새로 만든다 (기존 뷰어 HTML 은 다시 만들어야 서버에 붙음)")
     args = ap.parse_args()
+    if args.new_key:
+        new_server_key()
+        print("접속 키를 새로 만들었습니다 — 뷰어를 다시 만들어 주세요 (loopsym / render_html).")
+    else:
+        server_key()                       # 없으면 지금 만든다
     print(f"loopsym server — ws://{args.host}:{args.port}/ws (뷰어를 새로고침하면 잡습니다)")
+    print("  접속 키로 확인된 loopsym 뷰어만 받습니다 (다른 웹사이트 접속은 거부).")
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 

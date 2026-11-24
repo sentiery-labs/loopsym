@@ -366,6 +366,24 @@ class DiscreteTransferFunction(Block):
         return tuple(nxt)
 
 
+class ZeroOrderHold(Block):
+    """ZOH — 샘플 시점의 입력을 다음 샘플까지 붙잡는다: y(t) = u(t_k), t_k ≤ t < t_k+st.
+
+    연속 신호를 디지털 제어기로 넘기는 '샘플러'. 실제 비행 컨트롤러처럼
+    제어기 전체를 이산으로 만들려면 측정(또는 오차) 신호에 이 블록을 단다.
+    상태는 없고, 샘플 사이 출력 유지는 엔진의 샘플 시간 규칙이 맡는다
+    (sim.py — 샘플 블록 출력은 자기 샘플 시점에만 계산)."""
+
+    n_in = 1
+
+    def __init__(self, st=0.01, name=None):
+        super().__init__(name)
+        self.st = self.sample_time = st
+
+    def output(self, t, u, x):
+        return (u[0],)
+
+
 # ----------------------------------------------------------------------
 # Mux / Demux — 벡터 신호 실험 (P14 스파이크; docs/spike_p14 참조)
 # 규칙(v1): Mux 출력(튜플 신호)은 Demux 로만 소비한다. 연산 블록 투입 금지.
