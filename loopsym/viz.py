@@ -30,6 +30,7 @@ _PARAMS = {
     "UnitDelay": ["st", "x0"],
     "DiscreteIntegrator": ["st", "x0"],
     "DiscreteTransferFunction": ["num", "den", "st"],
+    "ZeroOrderHold": ["st"],
     "Mux": ["n_in"],
     "Demux": ["n_out"],
     "Ros2Subscribe": ["topic", "msg_type", "fields", "st", "defaults"],
@@ -290,10 +291,15 @@ def render_html(bd, path, title="loopsym viewer", t_end=None, dt=None,
         html = html.replace("/*__SIM_DEFAULTS__*/null", json.dumps(defaults))
     if save_name:
         html = html.replace("/*__SAVE_NAME__*/null", json.dumps(save_name))
-    # 엔진 소스 주입. "</" 는 "<\/" 로 — 소스 안의 문자열이 </script> 로 오인되는 것 방지
+    # 로컬 서버 접속 키 (auth.py) — 이 HTML 은 남에게 공개하지 말 것.
+    from .auth import server_key
+    html = html.replace("/*__SERVER_KEY__*/null", json.dumps(server_key()))
+    html = html.replace("__TITLE__", title)
+    # 엔진 소스 주입은 반드시 마지막 — 심은 viz.py 안에도 위 표식 문자열들이 있어서
+    # 뒤에 치환하면 심은 소스(=JS 문자열)가 깨진다.
+    # "</" 는 "<\/" 로 — 소스 안의 문자열이 </script> 로 오인되는 것 방지
     sources = json.dumps(_engine_sources(), ensure_ascii=False).replace("</", "<\\/")
     html = html.replace("/*__BLOCKSIM_SRC__*/null", sources)
-    html = html.replace("__TITLE__", title)
     html = (
         "<!doctype html>\n<html lang=\"ko\">\n<head>\n"
         f"<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"

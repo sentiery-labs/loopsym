@@ -8,6 +8,13 @@ Simulink 의 ode4 (Runge-Kutta, fixed-step) 에 해당한다.
      "어느 와이어에 어떤 값이 흐르는지"를 채운다.
   3. deriv(t, x): 출력이 다 계산된 뒤 상태 블록들의 미분을 모아 dx 를 만든다.
   4. RK4 로 x 를 한 스텝 전진. Scope 는 큰 스텝(major step)에서만 기록한다.
+
+샘플 시간 규칙 (Simulink 와 동일):
+  sample_time 이 있는 블록(이산 블록, ZeroOrderHold, 이산 제어기)은 자기 샘플
+  시점의 major step 에서만 출력을 계산한다. 그 사이 — 다음 base step 들과
+  RK4 minor step — 에는 직전 출력을 그대로 낸다(ZOH). 그래서 st > dt 인
+  멀티레이트에서도 이산 출력이 정확히 st 간격으로 바뀌고, feedthrough 이산
+  블록(PID 등)이 minor step 의 입력으로 다시 계산되는 일이 없다.
 """
 
 from .core import Diagram, Port
@@ -77,6 +84,9 @@ class Simulator:
         # 이산 상태: 블록별 튜플 (RK4 벡터와 분리 — 적분되지 않는다)
         self.discrete = [b for b in diagram.blocks if b.dstate_size]
         self.xd = {}
+        # 샘플 블록: sample_time 이 있는 블록 (이산 상태가 없어도 — 예: ZeroOrderHold)
+        self.sampled = [b for b in diagram.blocks if b.sample_time is not None]
+        self._held = {}     # 샘플 블록의 마지막 출력 — 샘플 사이에 그대로 낸다
 
     def _initial_state(self):
         x = [0.0] * self.n_states
@@ -89,8 +99,22 @@ class Simulator:
         o = self.offsets[b]
         return tuple(x[o:o + b.state_size])
 
-    def _eval_outputs(self, t, x):
+    def _block_output(self, b, t, u, x, hits):
+        """블록 하나의 출력. 샘플 블록은 샘플 시점(hits)에만 계산하고, 그 밖에는
+        직전 출력을 그대로 낸다 = ZOH. 이산 블록이면 x 자리에 이산 상태."""
+        if b.sample_time is not None and b not in hits:
+            return self._held[b]
+        xs = self.xd[b] if b.dstate_size else self._block_state(b, x)
+        y = b.output(t, u, xs)
+        if b.sample_time is not None:
+            self._held[b] = y
+        return y
+
+    def _eval_outputs(self, t, x, hits=frozenset()):
         """블록 출력 계산. 반환: ({Port: 값}, {블록: 입력 튜플})
+
+        hits: 이 major step 에서 샘플 시점인 블록들. 기본값(빈 집합)은 RK4
+        minor step — 샘플 블록은 전부 붙잡아 둔 출력을 낸다.
 
         Simulink 와 같은 2단계:
           1) feedthrough=False 블록 — 출력이 상태 x 만으로 결정되므로
@@ -100,18 +124,13 @@ class Simulator:
         signals = {}
         for b in self.bd.blocks:
             if not b.feedthrough:
-                xs = self.xd[b] if b.dstate_size else self._block_state(b, x)
-                y = b.output(t, None, xs)
+                y = self._block_output(b, t, None, x, hits)
                 for i, v in enumerate(y):
                     signals[Port(b, i)] = v
         for b in self.order:
             if b.feedthrough:
                 u = tuple(signals[self.bd.wires[Port(b, i)]] for i in range(b.n_in))
-                # 이산 블록이면 x 자리에 이산상태 — 위의 non-feedthrough 분기와 같은 규약.
-                # ponytail: RK4 minor step 에서도 u 로 재계산됨 (엄밀한 ZOH 아님).
-                # 단일레이트(st==dt)에선 차이 미미; 멀티레이트 정밀 ZOH 필요 시 출력 캐시 추가.
-                xs = self.xd[b] if b.dstate_size else self._block_state(b, x)
-                y = b.output(t, u, xs)
+                y = self._block_output(b, t, u, x, hits)
                 for i, v in enumerate(y):
                     signals[Port(b, i)] = v
         # 모든 신호가 정해진 뒤에야 각 블록의 입력 튜플을 만들 수 있다
@@ -146,9 +165,10 @@ class Simulator:
         완전히 같다 (run 자체가 이 제너레이터를 소비한다)."""
         x = self._initial_state()
         self.xd = {b: tuple(b.dinitial()) for b in self.discrete}
-        # 이산 블록의 sample_time 은 dt 의 정수배여야 한다 (Simulink 의 rate 규칙)
+        self._held = {}
+        # 샘플 블록의 sample_time 은 dt 의 정수배여야 한다 (Simulink 의 rate 규칙)
         period = {}
-        for b in self.discrete:
+        for b in self.sampled:
             m = b.sample_time / dt
             if b.sample_time <= 0 or abs(m - round(m)) > 1e-6:
                 raise ValueError(
@@ -158,7 +178,9 @@ class Simulator:
         for step in range(n + 1):
             t = step * dt          # 누적 덧셈 대신 곱셈 — 부동소수점 드리프트 방지
             # --- major step: 출력 계산, Scope 기록 ---
-            _, inputs = self._eval_outputs(t, x)
+            # step 0 은 모든 샘플 블록의 샘플 시점이라 _held 가 여기서 채워진다
+            hits = {b for b in self.sampled if step % period[b] == 0}
+            _, inputs = self._eval_outputs(t, x, hits)
             for b in self.bd.blocks:
                 if isinstance(b, Scope):
                     b.record(t, inputs[b])
@@ -177,8 +199,9 @@ class Simulator:
             ]
 
             # --- 샘플 시점인 이산 블록 상태 갱신: xd(k) → xd(k+1), 입력은 u(t_k) ---
+            # 새 상태의 출력은 다음 샘플 시점에 나온다 (그 전까진 _held 유지)
             for b in self.discrete:
-                if step % period[b] == 0:
+                if b in hits:
                     self.xd[b] = tuple(b.update(t, inputs[b], self.xd[b]))
 
             yield step, t

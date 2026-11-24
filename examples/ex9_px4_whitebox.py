@@ -3,6 +3,8 @@
 ex7 은 검증된 제어기 블록(한 덩어리)을 썼다. 이 예제는 같은 알고리즘을
 **기본 블록(Gain/Sum/Saturation/UnitDelay/PyFunction)으로 조립한 서브시스템**
 으로 만든다 — 뷰어에서 더블클릭으로 들어가면 PX4 내부 신호가 그대로 보인다.
+Position/Rate 서브시스템은 입력마다 ZeroOrderHold(st=DT)를 달아 FC 처럼
+샘플 시점의 값으로만 계산한다 (한 덩어리 제어기 블록의 샘플 규칙과 동일).
 쿼터니언 좌표변환만 전용 블록(EulerToQuat/QuatAttitudeError/AccelToAttitude,
 = Simulink 블록판의 MATLAB Function 블록 상당)이다.
 
@@ -32,7 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from loopsym import (
     Constant, Diagram, Gain, Inport, Integrator, Outport, PyFunction, Saturation,
-    Scope, Simulator, Step, Subsystem, Sum, UnitDelay, render_html,
+    Scope, Simulator, Step, Subsystem, Sum, UnitDelay, ZeroOrderHold, render_html,
     Mixer, QuadPlant, EulerToQuat, QuatAttitudeError, AccelToAttitude,
 )
 
@@ -41,6 +43,20 @@ G0 = 9.80665                     # CONSTANTS_ONE_G (제어기 쪽 표준중력)
 
 
 # ------------------------------------------------------------------ 공용 조각
+def sampled_inputs(d, names):
+    """FC 가 센서·명령을 읽는 순간: Inport 마다 ZOH(st=DT) 를 달아 반환.
+
+    이 뒤의 기본 블록(Gain/Sum…)은 샘플 사이에 붙잡힌 값만 본다 — 한 덩어리
+    제어기 블록(ex7)이 샘플 시점에만 계산되는 것과 같은 디지털 제어기."""
+    out = []
+    for i, n in enumerate(names):
+        p = d.add(Inport(i, name=n))
+        z = d.add(ZeroOrderHold(st=DT, name=f"{n}_zoh"))
+        d.connect(p, z)
+        out.append(z)
+    return out
+
+
 def clamped_integrator(d, u_port, gain, lim, name):
     """포화 누적기 x(k+1)=sat(x(k)+gain·u(k)) — MPC/MC 적분항의 블록 구현.
 
@@ -116,8 +132,7 @@ def build_rate_axis(kp, ki, kd, int_lim, yaw_lpf=None):
 def build_rate_control():
     """PX4_RateControl — in: rate_sp(3), rate(3) / out: torque(3)."""
     d = Diagram()
-    ins = [d.add(Inport(i, name=n)) for i, n in enumerate(
-        ["p_sp", "q_sp", "r_sp", "p", "q", "r"])]
+    ins = sampled_inputs(d, ["p_sp", "q_sp", "r_sp", "p", "q", "r"])
     outs = [d.add(Outport(i, name=f"t{ax}")) for i, ax in enumerate("xyz")]
     gains = [(0.15, 0.20, 0.003, 0.30, None),        # MC_ROLLRATE_*
              (0.15, 0.20, 0.003, 0.30, None),        # MC_PITCHRATE_*
@@ -211,8 +226,8 @@ def build_z_control():
 def build_position_control():
     """PX4_PositionControl — in: pos_sp(3)+yaw_sp+pos(3)+vel(3) / out: att_cmd(3)+thrust."""
     d = Diagram()
-    ins = [d.add(Inport(i, name=n)) for i, n in enumerate(
-        ["n_sp", "e_sp", "d_sp", "yaw_sp", "n", "e", "dpos", "vn", "ve", "vd"])]
+    ins = sampled_inputs(
+        d, ["n_sp", "e_sp", "d_sp", "yaw_sp", "n", "e", "dpos", "vn", "ve", "vd"])
     xy = d.add(Subsystem(build_xy_control(), name="XY_Control"))
     z = d.add(Subsystem(build_z_control(), name="Z_Control"))
     a2a = d.add(AccelToAttitude(name="accel_to_att"))

@@ -71,7 +71,7 @@ python examples/ex1_pi_closed_loop.py      # ex1_result.png + ex1_diagram.html �
 | 파일 | 내용 | 수업 주제 |
 |------|------|-----------|
 | `loopsym/core.py` | `Block` 베이스 클래스, `Diagram`, 위상 정렬 + 대수 루프 검출 | 클래스/상속, 그래프 알고리즘 |
-| `loopsym/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
+| `loopsym/blocks.py` | Step·Gain·Sum·Product·Integrator·TransferFunction·**PyFunction**·Scope + **Subsystem**(Inport/Outport, **마스크**) + **이산 블록**(UnitDelay·DiscreteIntegrator·DiscreteTF·ZeroOrderHold) + Mux/Demux | 상태공간, feedthrough, 샘플링 |
 | `loopsym/sim.py` | **flatten**(서브시스템 펼치기) + 고정 스텝 RK4 + 이산 상태 실행 | 수치적분, 안정성, 계층 구조 |
 | `loopsym/viz.py` + `viewer.html` | 인터랙티브 뷰어 + `save_json`/`load_json` | — |
 | `loopsym/realtime.py` | **실시간 모드**: `run_realtime()` — 절대 데드라인 + hybrid sleep 페이서, 지터 계측 | 실시간 시스템, 스케줄링 |
@@ -157,6 +157,12 @@ loopsym                                   # 뷰어를 열면 배지가 'Local Se
   프로토콜/구조는 `loopsym/server.py` docstring 참조.
 - 두 모드는 같은 파이썬 엔진을 부르므로 결과가 동일하다
   (`tests/test_server.py` 가 ex1~ex4 로 검증).
+- **접속 키 (보안)**: 서버는 다이어그램의 PyFunction 코드를 이 PC 의
+  파이썬으로 실행한다. 그래서 `loopsym`·`render_html` 이 만든 뷰어(사용자 홈
+  `~/.loopsym/server_key` 의 키가 심어짐)만 받고, 다른 웹사이트에서 온 접속은
+  거부한다(close 4403). 키를 바꾸려면 `python -m loopsym.server --new-key` 후
+  뷰어를 다시 만든다. 뷰어 HTML 에는 이 키가 들어 있으니 공개 저장소 등에
+  올리지 말 것. 원본 `viewer.html` 을 직접 연 페이지는 키가 없어 Pyodide 모드로 남는다.
 
 ### 실시간 모드 (external mode) — [CLD-P42]
 
@@ -212,6 +218,10 @@ python examples/ex6_ros2_turtlesim.py   # turtlesim 자동 기동 → go-to-goal
 - **실행 의미론**: ① 상태 블록 출력(상태만으로 결정) → ② feedthrough 블록을
   위상 순서로 → ③ 상태 미분 수집 → RK4. Simulink 의 minor/major step 구조의
   단순화판.
+- **샘플 시간**: `sample_time` 이 있는 블록(이산 블록·이산 제어기·ZeroOrderHold)
+  은 자기 샘플 시점에만 출력을 계산하고, 그 사이(다음 base step 과 RK4 minor
+  step)에는 그대로 유지한다 — Simulink 와 같은 규칙. 실제 FC 같은 디지털
+  제어기를 만들려면 측정(또는 오차) 신호에 `ZeroOrderHold` 를 단다 (ex4).
 - 신호는 스칼라 하나로 제한 — 교육 명료성 원칙. 벡터량은 포트 여러 개로
   펼치고, 시각 난잡함은 뷰어의 와이어 번들링(나란한 배선 ≥3 = 굵은선 ×N)이
   해결한다. Mux/Demux 는 제한적 실험 기능 (docs/spike_p14 참조).
