@@ -256,3 +256,36 @@ def test_viewer_defs_match_python_ports():
     assert "13 + Number(p.n_motors)" in _viewer_def(src, "WorldLink")
     assert "ground:" in _viewer_def(src, "QuadPlant")
     assert 'hasBlockType(model, "WorldLink")' in src
+
+
+# ---------------------------------------------------------------- 예제 ex12
+def test_example_ex12_runs_against_fake_world():
+    import importlib.util
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..", "examples", "ex12_sentiery_world.py")
+    spec = importlib.util.spec_from_file_location("ex12_sentiery_world", path)
+    ex12 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ex12)
+    with FakeWorld() as w:
+        bd, sc_pos, sc_alt = ex12.build(port=w.port, camera=False)
+        Simulator(bd).run(2.0, 0.004)
+        assert w.wait_for("bye")
+    assert len(w.steps) == 51
+    assert w.received[0]["rangefinder"] == {"max_m": 100.0} and w.received[0]["camera"] is None
+    assert sc_alt.data[0][-1] > 0.0                     # 이륙 중 (고도 증가)
+    assert "광개토관" in ex12.__doc__
+
+
+def test_example_ex12_summary_reports_collision(capsys):
+    """충돌로 멈추면 (출력은 한 샘플 늦어 Scope 에 안 남아도) 요약에 충돌이 나와야 한다."""
+    import importlib.util
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..", "examples", "ex12_sentiery_world.py")
+    spec = importlib.util.spec_from_file_location("ex12_sentiery_world", path)
+    ex12 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ex12)
+    with FakeWorld(respond=_hit_at_3) as w:
+        rc = ex12.main(["--port", str(w.port), "--t-end", "0.4", "--no-camera"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "광개토관" in out and "충돌 있음" in out
