@@ -505,7 +505,7 @@ const LIB = {
   // pin/pout: 포트 이름 (라벨+호버 툴팁) — 파이썬 블록 docstring 의 포트 순서와 동일
   QuadPlant: { cat: "plant", tag: "6-DoF", nIn: p => FRAME_N[p.frame] || 4, nOut: () => 13,
     defaults: { frame: "quad_x", m: 1.0, g: 9.81, ixx: 0.02, iyy: 0.02, izz: 0.04,
-                arm: 0.25, c_m: 0.06, roll0: 0.0, pitch0: 0.0, yaw0: 0.0, z0: 0.0 },
+                arm: 0.25, c_m: 0.06, roll0: 0.0, pitch0: 0.0, yaw0: 0.0, z0: 0.0, ground: false },
     pin: ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],
     pout: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD"],
     summary: p => `${p.frame} · m=${p.m}kg` },
@@ -553,6 +553,18 @@ const LIB = {
     pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "vN", "vE", "vD"],
     pout: ["gx", "gy", "gz", "ax", "ay", "az"],
     summary: p => String(p.fidelity) },
+  Rangefinder: { cat: "sensors", tag: "range", nIn: () => 13, nOut: () => 2,
+    defaults: { fidelity: "ideal", max_range: 100.0, noise_sd: 0.02, seed: 0, st: 0.04, link: "" },
+    pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD"],
+    pout: ["range", "valid"],
+    summary: p => String(p.fidelity) },
+  // 아래 방향 카메라 — 3D 월드(WorldLink) 전용. 영상은 배선이 아닌 파이썬 객체(Camera.latest)
+  Camera: { cat: "sensors", tag: "camera", nIn: () => 13, nOut: () => 2,
+    defaults: { fidelity: "world", width: 640, height: 480, hfov_deg: 90.0, fmt: "gray8", every: 1,
+                mount: "body", save_dir: "", save_every: 0, link: "", st: 0.04 },
+    pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD"],
+    pout: ["frame_seq", "age_s"],
+    summary: p => `${p.width}×${p.height}` },
   // 상태추정 팔레트 (loopsym.estimation — CLD-P64)
   ComplementaryFilter: { cat: "estimation", tag: "mahony", nIn: () => 6, nOut: () => 7,
     defaults: { kp: 1.0, ki: 0.05, st: 0.004 },
@@ -575,6 +587,14 @@ const LIB = {
     pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD"],
     pout: ["m1", "m2", "m3", "m4"],
     summary: p => "실펌웨어 " + String(p.transport) },
+  // SENTIERY 3D 월드 lockstep 연동 (loopsym.world — 서버 모드/파이썬 스크립트 전용)
+  WorldLink: { cat: "interfaces", tag: "3D 월드", nIn: p => 13 + Number(p.n_motors), nOut: () => 3,
+    defaults: { host: "127.0.0.1", port: 9431, st: 0.04, n_motors: 4, stop_on_collision: true,
+                connect_timeout: 5.0, hello_timeout: 30.0, frame_timeout: 5.0 },
+    pin: ["qw", "qx", "qy", "qz", "p", "q", "r", "pN", "pE", "pD", "vN", "vE", "vD",
+          "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],
+    pout: ["link_ok", "collided", "ground_up"],
+    summary: p => `${p.host}:${p.port}` },
 };
 const TAG_COLOR = { source: "var(--tag-src)", math: "var(--tag-math)", state: "var(--tag-state)", sink: "var(--tag-sink)", sub: "var(--tag-sub)", discrete: "var(--tag-disc)", ros2: "var(--tag-disc)",
                     plant: "var(--tag-state)", control: "var(--tag-math)", allocation: "var(--tag-math)", sensors: "var(--tag-src)", estimation: "var(--tag-disc)", navigation: "var(--tag-sub)", interfaces: "var(--tag-disc)" };
@@ -1710,7 +1730,10 @@ const PYODIDE_URLS = [
   "../loopsym/pyodide/pyodide.js",
   `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/pyodide.js`,
 ];
-const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py", "ros2.py"];
+// viz.py 의 _ENGINE_FILES 와 같게 (원본 viewer.html 개발 모드에서 fetch 하는 목록)
+const ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py", "realtime.py", "ros2.py",
+                      "drone.py", "sensors.py", "estimation.py", "navigation.py", "joystick.py", "mavlink.py",
+                      "world_protocol.py", "world.py"];
 let enginePromise = null;   // Promise<run_simulation> — 최초 1회만 로드하고 재사용
 
 function loadScriptTag(src) {
@@ -1871,6 +1894,13 @@ async function runSim() {
   if (hasBlockType(model, "MavlinkHil")) {
     status("이 다이어그램은 실기체/SITL 연동용입니다 — 브라우저에서 재실행할 수 "
       + "없습니다. 아래 파형은 방금 실행한 PX4 SITL 비행 결과입니다.", "err");
+    return;
+  }
+  // WorldLink: 3D 월드와 TCP 로 주고받으므로 브라우저(Pyodide)에서는 못 돈다.
+  // 로컬 서버 모드에서는 서버의 파이썬이 접속하므로 그대로 실행한다.
+  if (!serverWs && hasBlockType(model, "WorldLink")) {
+    status("이 다이어그램은 SENTIERY 3D 월드 연동용입니다 — `python -m loopsym.server` 를 켜고 "
+      + "새로고침한 뒤 실행하세요.", "err");
     return;
   }
   try {

@@ -199,3 +199,24 @@ def test_viewer_has_no_js_engine():
     for sym in ["makeRuntime", "compileFlat", "flattenModel", "resolveMask", "compileExpr"]:
         assert sym not in src, f"폐기된 JS 엔진 심볼 잔존: {sym}"
     assert "run_simulation" in src   # Pyodide 경로는 있어야 함
+
+
+def test_pyodide_world_import_and_guard(tmp_path):
+    """브라우저(Pyodide)에서 loopsym.world 는 임포트되고, WorldLink 실행은 안내 오류."""
+    from loopsym.world import WorldLink
+    bd = Diagram()
+    link = bd.add(WorldLink(name="link"))
+    from loopsym import Constant
+    for i in range(link.n_in):
+        bd.connect(bd.add(Constant(0.0)), link[i])
+    sc = bd.add(Scope(n_in=1, name="scope"))
+    bd.connect(link[0], sc)
+    cf = tmp_path / "cases.json"
+    cf.write_text(json.dumps([{"name": "world", "model": export_json(bd),
+                               "t_end": 0.2, "dt": 0.01}]), encoding="utf-8")
+    env = dict(os.environ, BS_SRC_DIR=os.path.join(ROOT, "loopsym"), BS_CASES=str(cf))
+    out = subprocess.run([node, HARNESS], env=env, cwd=ROOT,
+                         capture_output=True, text=True, timeout=300)
+    assert out.returncode == 0, out.stderr
+    res = json.loads(out.stdout)[0]["result"]
+    assert res["errors"] and "브라우저" in res["errors"][0], res["errors"]

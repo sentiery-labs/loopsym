@@ -33,6 +33,7 @@ loopsym = "loopsym.__main__:main"    # `loopsym [model.json]` → 독립 앱 창
 examples = ["matplotlib"]
 server = ["fastapi", "uvicorn"]          # 로컬 서버 모드 (python -m loopsym.server)
 mavlink = ["pymavlink"]                  # MavlinkHil 블록 (PX4 SITL/HITL)
+world = ["numpy"]                        # Image.to_numpy() (3D 월드 카메라 영상을 배열로)
 dev = ["pytest", "matplotlib", "fastapi", "uvicorn", "websockets"]
 
 [tool.setuptools]

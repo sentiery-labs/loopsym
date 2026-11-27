@@ -41,6 +41,7 @@ Pyodide 모드로 자동 폴백한다. HILS(실제 Pixhawk)와 실시간 러너(
 
 import argparse
 import asyncio
+import contextlib
 import json
 import queue
 import threading
@@ -122,19 +123,21 @@ def _sim_worker(model, t_end, dt, mode, out_q, stop_evt, joy_state=None):
         meter = JitterMeter(dt) if mode == "realtime" else None
 
         steps = 0
-        for step, t in sim.iter_run(t_end, dt):
-            if meter:
-                meter.tick()
-            steps, t_now = step + 1, t
-            if stop_evt.is_set():
-                stopped = True
-                break
-            now = time.monotonic()
-            if now - last_flush >= CHUNK_WALL_S:
-                flush()
-                last_flush = now
-            if pacer:
-                pacer.wait()          # 스텝 경계에서만 대기 — 적분에는 무관
+        # closing: ■ 정지(break)에도 그 자리에서 블록 finish() 가 불린다 (접속 정리)
+        with contextlib.closing(sim.iter_run(t_end, dt)) as it:
+            for step, t in it:
+                if meter:
+                    meter.tick()
+                steps, t_now = step + 1, t
+                if stop_evt.is_set():
+                    stopped = True
+                    break
+                now = time.monotonic()
+                if now - last_flush >= CHUNK_WALL_S:
+                    flush()
+                    last_flush = now
+                if pacer:
+                    pacer.wait()          # 스텝 경계에서만 대기 — 적분에는 무관
         flush()   # 남은 증분
         stats = {"steps": steps, "elapsed_s": time.monotonic() - t0,
                  "stopped": stopped, "mode": mode}

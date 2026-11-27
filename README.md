@@ -92,7 +92,8 @@ python examples/ex1_pi_closed_loop.py      # ex1_result.png + ex1_diagram.html �
 | 파일 | 내용 |
 |------|------|
 | `loopsym/drone.py` | 6-DoF 멀티로터 플랜트(프레임: quad X/+, hexa, octo) + PX4 Rate/Attitude/Position Controller + Mixer + 화이트박스 조립 블록 |
-| `loopsym/sensors.py` | IMU — fidelity 규약(ideal/noisy, 포트 불변, 시드 고정) |
+| `loopsym/sensors.py` | IMU, Rangefinder — fidelity 규약(ideal/noisy/world, 포트 불변, 시드 고정) |
+| `loopsym/world.py` + `world_protocol.py` | **3D 월드 연동**: WorldLink, Camera, Image — SENTIERY 3D 월드와 lockstep |
 | `loopsym/estimation.py` | ComplementaryFilter (Mahony) |
 | `loopsym/navigation.py` | WaypointManager (웨이포인트 순회) |
 | `loopsym/joystick.py` | 게임패드 입력 (브라우저 Gamepad API → 서버, RC Mode 2) |
@@ -200,6 +201,35 @@ python examples/ex6_ros2_turtlesim.py   # turtlesim 자동 기동 → go-to-goal
 
 검증: `tests/test_ros2.py` — 같은 다이어그램 안 Publish→DDS→Subscribe
 루프백, defaults, JSON 라운드트립, major-step 단일 발행 (rclpy 없으면 skip).
+
+### 3D 월드 연동 (SENTIERY)
+
+MATLAB/Simulink 가 3D 엔진(UAV Toolbox 의 Unreal 연동)에 붙는 것처럼, loopsym
+다이어그램을 **SENTIERY 3D 월드**(세종대 캠퍼스 등)에 붙인다. loopsym 이 시간의
+주인이고 물리(`QuadPlant`)를 계산하는 유일한 곳이다. 월드는 받은 자세 그대로
+기체를 그리고, 그 자리의 거리계·카메라·충돌 값을 돌려준다(lockstep, TCP 9431).
+
+- `WorldLink` (Interfaces): 입력 = 플랜트 상태 13 + 모터 명령, 출력 = `link_ok`,
+  `collided`, `ground_up_m`. 충돌하면 시각과 부딪힌 것 이름으로 멈춘다
+  (`stop_on_collision`).
+- `Rangefinder(fidelity="world")`, `Camera` (Sensors): 월드가 잰 거리·찍은 영상.
+  같은 `Rangefinder` 가 `ideal`/`noisy` 로도 돈다 — 포트는 그대로(ARCHITECTURE §2,
+  Level 2 = `"world"`). 영상은 배선에 싣지 않고 `Camera.latest`(`Image`)로 읽는다
+  (`Image.to_numpy()` 는 `pip install "loopsym[world]"`).
+- **월드 센서 값은 한 샘플(기본 0.04 s) 늦다** — 실제 센서 지연과 같은 성질.
+  첫 샘플은 "값 없음".
+
+실행 순서: ① SENTIERY 개발판을 `-sentiery-loopsym` 으로 켠다(또는 편집기에서
+세종대 장면의 loopsym 기체). ② 파이썬 스크립트나 로컬 서버 모드에서 실행한다.
+
+```bash
+python examples/ex12_sentiery_world.py          # 광개토관 위 60 m, 300 m 정사각 순회
+```
+
+브라우저(Pyodide) 모드에서는 소켓을 열 수 없어 실행하지 않고 안내만 한다.
+통신 규약 정본: [`docs/world_link_protocol.md`](docs/world_link_protocol.md).
+검증: `tests/test_world_link.py`, `test_rangefinder.py`, `test_camera.py` — 파이썬
+가짜 월드 서버(`tests/fake_world.py`)로 Unity 없이.
 
 ## 실시간 성능 (실측, 2026-07-14)
 

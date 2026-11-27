@@ -2,6 +2,21 @@
 
 ## 미발행 (0.1.2 후보)
 
+- **3D 월드 연동 (SENTIERY) — fidelity Level 2 "world"** — `WorldLink` 블록이
+  TCP 로 SENTIERY 3D 월드에 기체 자세를 보내고, 거리계·카메라·충돌 값을
+  lockstep 으로 받는다. loopsym 이 유일한 적분 주체. `Rangefinder`
+  (ideal/noisy/world), `Camera` + `Image`(PGM/PPM 저장, `to_numpy()` 는 extra
+  `world`). 월드 센서 값은 한 샘플 늦다. 통신 규약 v1 =
+  `docs/world_link_protocol.md`. 예제 `ex12_sentiery_world`. 브라우저 모드는 안내만.
+- **충실도 Level 2 이름 `"gazebo"` → `"world"`** — Gazebo 는 같은 자리의 다른
+  구현(미구현)으로 남긴다. 센서마다 지원 단계는 `supported_fidelity`.
+  `fidelity="gazebo"` 는 이제 `ValueError`.
+- **블록 실행 끝 고리** — `Block.finish()` 는 실행이 어떻게 끝나든(정상·예외·
+  ■ 정지) 실행마다 한 번, `Block.resolve_links(blocks)` 는 Simulator 를 만들 때
+  펼친 블록 목록으로 한 번 불린다. 서버 모드·실시간 러너도 정지 즉시 `finish`.
+- **QuadPlant `ground` 저장** — 뷰어 JSON 저장·불러오기에서 빠지던 `ground` 를
+  저장한다.
+
 - **파이썬 최소 버전 3.10** — 3.9 는 2025-10 지원 종료이고, GitHub Actions
   ubuntu-latest(26.04)에서 3.9 를 더 이상 받을 수 없어 CI 가 설치 단계에서
   실패했다. CI 매트릭스 3.10/3.12, `requires-python = ">=3.10"`

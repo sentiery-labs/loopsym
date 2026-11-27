@@ -263,3 +263,109 @@ def test_pyfunction_def_form_closed_loop_and_roundtrip():
     sc2 = [b for b in bd2.blocks if isinstance(b, Scope)][0]
     run(bd2, 10.0, 0.01)
     assert sc2.data[0][-1] == sc.data[0][-1]
+
+
+# ---------------------------------------------------------------- 실행 끝 / 링크 찾기 고리
+from loopsym.core import Block   # noqa: E402
+from loopsym.sim import Simulator   # noqa: E402
+
+
+class Counter(Block):
+    """시험용: finish 호출 수, resolve_links 로 받은 블록 목록을 기록하는 통과 블록."""
+    n_in = 1
+    n_out = 1
+
+    def __init__(self, fail_finish=False, name=None):
+        super().__init__(name)
+        self.finished = 0
+        self.links_calls = []
+        self.fail_finish = fail_finish
+
+    def output(self, t, u, x):
+        return (u[0],)
+
+    def resolve_links(self, blocks):
+        self.links_calls.append(list(blocks))
+
+    def finish(self):
+        self.finished += 1
+        if self.fail_finish:
+            raise ValueError("finish 실패")
+
+
+class Boom(Block):
+    """시험용: t ≥ 0.5 에서 RuntimeError."""
+    n_in = 0
+    n_out = 1
+
+    def output(self, t, u, x):
+        if t >= 0.5:
+            raise RuntimeError("붐")
+        return (1.0,)
+
+
+def _counter_diagram(src=None, fail_finish=False):
+    bd = Diagram()
+    s = bd.add(src or Constant(1.0))
+    c = bd.add(Counter(fail_finish=fail_finish))
+    sc = bd.add(Scope())
+    bd.connect(s, c)
+    bd.connect(c, sc)
+    return bd, c
+
+
+def test_finish_called_once_after_run():
+    bd, c = _counter_diagram()
+    run(bd, 1.0, 0.01)
+    assert c.finished == 1
+
+
+def test_finish_called_when_iteration_stops_early():
+    import threading
+    from loopsym.realtime import run_realtime
+    bd, c = _counter_diagram()
+    ev = threading.Event()
+    ev.set()
+    stats = run_realtime(bd, 10.0, 0.01, stop_event=ev, pin=False)
+    assert stats["stopped"] is True
+    assert c.finished == 1
+
+
+def test_finish_called_when_block_raises():
+    bd, c = _counter_diagram(src=Boom())
+    with pytest.raises(RuntimeError, match="붐"):
+        run(bd, 1.0, 0.01)
+    assert c.finished == 1
+
+
+def test_finish_error_does_not_mask_run_error():
+    bd, c = _counter_diagram(src=Boom(), fail_finish=True)
+    with pytest.warns(UserWarning, match="finish 실패"):
+        with pytest.raises(RuntimeError, match="붐"):
+            run(bd, 1.0, 0.01)
+    assert c.finished == 1
+
+
+def test_finish_error_raised_after_normal_run():
+    bd, c = _counter_diagram(fail_finish=True)
+    with pytest.raises(ValueError, match="finish 실패"):
+        run(bd, 0.1, 0.01)
+
+
+def test_resolve_links_gets_flattened_blocks():
+    inner = Diagram()
+    i = inner.add(Inport(0))
+    c = inner.add(Counter(name="inner_counter"))
+    o = inner.add(Outport(0))
+    inner.connect(i, c)
+    inner.connect(c, o)
+    bd = Diagram()
+    k = bd.add(Constant(2.0))
+    sub = bd.add(Subsystem(inner, name="S"))
+    sc = bd.add(Scope())
+    bd.connect(k, sub)
+    bd.connect(sub, sc)
+    Simulator(bd)
+    assert len(c.links_calls) == 1
+    names = {b.name for b in c.links_calls[0]}
+    assert "inner_counter" in names and "S" not in names

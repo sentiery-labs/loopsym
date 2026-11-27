@@ -16,6 +16,7 @@ P40 재검증(benchmarks/results/20260714_p40.md)에서 확립한 원칙:
 순수 표준 라이브러리 — 코어 무의존성 원칙(교육용) 유지.
 """
 
+import contextlib
 import os
 import time
 
@@ -113,14 +114,16 @@ def run_realtime(diagram, t_end, dt=0.01, speed=1.0,
     meter = JitterMeter(dt, speed)
     stopped = False
     t0 = time.perf_counter()
-    for step, t in sim.iter_run(t_end, dt):
-        meter.tick()
-        if stop_event is not None and stop_event.is_set():
-            stopped = True
-            break
-        if on_step is not None:
-            on_step(step, t)
-        pacer.wait()
+    # closing: break 로 멈춰도 그 자리에서 블록 finish() 가 불린다 (접속 정리)
+    with contextlib.closing(sim.iter_run(t_end, dt)) as it:
+        for step, t in it:
+            meter.tick()
+            if stop_event is not None and stop_event.is_set():
+                stopped = True
+                break
+            if on_step is not None:
+                on_step(step, t)
+            pacer.wait()
     stats = meter.stats()
     stats.update(stopped=stopped, pinned=pinned,
                  elapsed_s=time.perf_counter() - t0)

@@ -37,7 +37,7 @@ _PARAMS = {
     "Ros2Publish": ["topic", "msg_type", "fields"],
     # 드론 팔레트 (drone.py, CLD-P65)
     "QuadPlant": ["frame", "m", "g", "ixx", "iyy", "izz", "arm", "c_m",
-                  "roll0", "pitch0", "yaw0", "z0"],
+                  "roll0", "pitch0", "yaw0", "z0", "ground"],
     "PID": ["kp", "ki", "kd", "st", "lim"],
     "AttitudeController": ["roll_p", "pitch_p", "yaw_p", "yaw_w"],
     "RateController": ["st"],
@@ -50,6 +50,9 @@ _PARAMS = {
     # 센서 팔레트 (sensors.py, CLD-P62 — fidelity 규약)
     "IMU": ["fidelity", "gyro_bias", "gyro_nd", "accel_bias", "accel_nd",
             "g", "seed", "st"],
+    "Rangefinder": ["fidelity", "max_range", "noise_sd", "seed", "st", "link"],
+    "Camera": ["fidelity", "width", "height", "hfov_deg", "fmt", "every", "mount",
+               "save_dir", "save_every", "link", "st"],
     # 상태추정 팔레트 (estimation.py, CLD-P64)
     "ComplementaryFilter": ["kp", "ki", "st"],
     # 항법 팔레트 (navigation.py)
@@ -58,6 +61,9 @@ _PARAMS = {
     "Joystick": ["deadzone", "idle_thrust", "mode_btns", "st"],
     # MAVLink HIL (mavlink.py, CLD-P41)
     "MavlinkHil": ["st", "px4dir", "autostart", "takeoff_at", "transport"],
+    # 3D 월드 연동 (world.py — fidelity "world", docs/world_link_protocol.md)
+    "WorldLink": ["host", "port", "st", "n_motors", "stop_on_collision",
+                  "connect_timeout", "hello_timeout", "frame_timeout"],
 }
 
 
@@ -200,13 +206,15 @@ def load_json(src):
                     from . import navigation as _navigation
                     from . import joystick as _joystick
                     from . import mavlink as _mavlink
+                    from . import world as _world
                     from .core import Block as _Block
                     cls = (getattr(_drone, cls_name, None)
                            or getattr(_sensors, cls_name, None)
                            or getattr(_estimation, cls_name, None)
                            or getattr(_navigation, cls_name, None)
                            or getattr(_joystick, cls_name, None)
-                           or getattr(_mavlink, cls_name, None))
+                           or getattr(_mavlink, cls_name, None)
+                           or getattr(_world, cls_name, None))
                     if not (isinstance(cls, type) and issubclass(cls, _Block)):
                         cls = None
                 if cls is None:
@@ -232,7 +240,7 @@ def load_json(src):
 # (JS 시뮬 엔진 복제본은 2026-07 에 폐기: 실행은 파이썬 한 곳뿐, README 참조)
 _ENGINE_FILES = ["__init__.py", "core.py", "blocks.py", "sim.py", "viz.py", "webapi.py",
                  "realtime.py", "ros2.py", "drone.py", "sensors.py", "estimation.py",
-                 "navigation.py", "joystick.py", "mavlink.py"]
+                 "navigation.py", "joystick.py", "mavlink.py", "world_protocol.py", "world.py"]
 
 
 def _engine_sources():
