@@ -25,8 +25,11 @@ from .drone import (                           # 드론 팔레트 (CLD-P65)
     QuadPlant, PID, RateController, AttitudeController, PositionController,
     Mixer, QuadXMixer, EulerToQuat, QuatAttitudeError, AccelToAttitude,
 )
-from .sensors import SensorBlock, IMU          # 센서 팔레트 (CLD-P62)
+from .sensors import SensorBlock, IMU, Rangefinder   # 센서 팔레트 (CLD-P62)
 from .estimation import ComplementaryFilter    # 상태추정 팔레트 (CLD-P64)
 from .navigation import WaypointManager        # 항법 팔레트 (13주차, P22)
 from .joystick import Joystick                 # 게임패드 입력 (Interfaces)
 from .mavlink import MavlinkHil                # PX4 SITL HIL 브리지 (CLD-P41)
+from .world import (                           # 3D 월드(SENTIERY) lockstep 연동 — fidelity "world"
+    WorldLink, Camera, Image, WorldLinkError, WorldCollision,
+)

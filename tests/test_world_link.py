@@ -195,3 +195,64 @@ def test_find_link_by_name_and_default():
         find_link([k], "")
     with pytest.raises(ValueError, match="linkC"):
         find_link([a, b], "linkC")
+
+
+# ---------------------------------------------------------------- 내보내기 / 저장·불러오기 / 뷰어
+def test_package_exports():
+    import loopsym
+    for n in ("WorldLink", "Camera", "Image", "Rangefinder", "WorldLinkError", "WorldCollision"):
+        assert hasattr(loopsym, n), n
+
+
+def test_json_roundtrip_world_blocks():
+    from loopsym import QuadPlant, export_json, load_json
+    from loopsym.sensors import Rangefinder
+    from loopsym.world import Camera
+    bd = Diagram()
+    plant = bd.add(QuadPlant(ground=True, name="plant"))
+    link = bd.add(WorldLink(port=9500, st=0.04, frame_timeout=2.5, name="link"))
+    rf = bd.add(Rangefinder(fidelity="world", max_range=80.0, link="link", name="rf"))
+    cam = bd.add(Camera(width=320, height=240, every=2, mount="level", save_dir="out",
+                        save_every=5, link="link", name="cam"))
+    for i in range(4):
+        bd.connect(bd.add(Constant(0.5)), plant[i])
+        bd.connect(bd.add(Constant(0.5)), link[13 + i])
+    for i in range(13):
+        bd.connect(plant[i], link[i])
+        bd.connect(plant[i], rf[i])
+        bd.connect(plant[i], cam[i])
+    sc = bd.add(Scope(2))
+    bd.connect(rf[0], sc[0])
+    bd.connect(cam[0], sc[1])
+    back = load_json(export_json(bd))
+    by = {b.name: b for b in back.blocks}
+    assert by["plant"].ground is True
+    l2 = by["link"]
+    assert isinstance(l2, WorldLink)
+    assert (l2.port, l2.st, l2.frame_timeout, l2.n_motors) == (9500, 0.04, 2.5, 4)
+    assert (by["rf"].fidelity, by["rf"].max_range, by["rf"].link) == ("world", 80.0, "link")
+    c2 = by["cam"]
+    assert (c2.width, c2.height, c2.every, c2.mount, c2.save_dir, c2.save_every, c2.link) == \
+        (320, 240, 2, "level", "out", 5, "link")
+
+
+def _viewer_def(src, cls):
+    import re
+    m = re.search(r"\n  " + cls + r": \{(.*?)\n  [A-Za-z0-9_]+: \{|\n  " + cls + r": \{(.*?)\n\};", src, re.S)
+    assert m, f"viewer.html 에 {cls} 정의가 없음"
+    return m.group(1) or m.group(2)
+
+
+def test_viewer_defs_match_python_ports():
+    import os
+    from loopsym.viz import _PARAMS
+    src = open(os.path.join(os.path.dirname(__file__), "..", "loopsym", "viewer.html"),
+               encoding="utf-8").read()
+    for cls, n_out in (("WorldLink", 3), ("Rangefinder", 2), ("Camera", 2)):
+        d = _viewer_def(src, cls)
+        assert f"nOut: () => {n_out}" in d, cls
+        for p in _PARAMS[cls]:
+            assert f"{p}:" in d.split("defaults:")[1].split("}")[0], f"{cls}.{p} 기본값 없음"
+    assert "13 + Number(p.n_motors)" in _viewer_def(src, "WorldLink")
+    assert "ground:" in _viewer_def(src, "QuadPlant")
+    assert 'hasBlockType(model, "WorldLink")' in src
