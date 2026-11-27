@@ -19,6 +19,7 @@ ARCHITECTURE §2 의 fidelity Level 2 "world" 경로. loopsym 이 시간의 주�
   임포트는 되고, 실행하면 안내 오류로 멈춘다.
 """
 
+import math
 import os
 import sys
 
@@ -151,6 +152,11 @@ class WorldLink(Block):
             self._send(RESET, t)
             self._expect("reset_ok", self.frame_timeout, t)
             self._new_run = False
+        bad = [i for i, v in enumerate(u[:13 + self.n_motors]) if not math.isfinite(v)]
+        if bad:
+            raise WorldLinkError(
+                f"{self.name}: t={t:.3f}s seq={self._seq} 기체 상태가 발산했습니다(NaN/inf, 입력 "
+                f"{bad}) — 3D 월드로 보내지 않고 멈춥니다. 제어기·플랜트 파라미터를 확인하세요")
         p = tuple(u[7:10])
         prev = self._p_prev if self._p_prev is not None else p
         self._send(step(self._seq, t, u[0:4], p, prev, u[10:13], u[4:7], u[13:13 + self.n_motors]), t)
@@ -168,14 +174,27 @@ class WorldLink(Block):
     def _accept_frame(self, head, body, t):
         """받은 frame 을 마지막 값으로 저장한다. 영상이 있으면 크기를 확인하고 Image 로."""
         info = head.get("camera")
+        cam = self.camera
+        where = f"{self.name}: t={t:.3f}s seq={self._seq}"
+        if cam is None:
+            if info or body:
+                raise WorldLinkError(
+                    f"{where} 카메라를 요청하지 않았는데 영상이 왔습니다 (몸 {len(body)} 바이트)")
+        else:
+            due = self._seq % cam.every == 0
+            if due and not info:
+                raise WorldLinkError(
+                    f"{where} 영상이 와야 하는 샘플인데 없습니다 (camera every={cam.every})")
+            if not due and (info or body):
+                raise WorldLinkError(
+                    f"{where} 영상이 없어야 하는 샘플인데 왔습니다 (camera every={cam.every})")
         img = None
-        if info and self.camera is not None:
-            cam = self.camera
+        if info:
             want = cam.width * cam.height * _CHANNELS[cam.fmt]
             got = (info.get("width"), info.get("height"), info.get("format"))
             if got != (cam.width, cam.height, cam.fmt) or len(body) != want:
                 raise WorldLinkError(
-                    f"{self.name}: t={t:.3f}s seq={self._seq} 영상 크기가 설정과 다릅니다 — "
+                    f"{where} 영상 크기가 설정과 다릅니다 — "
                     f"설정 {cam.width}×{cam.height} {cam.fmt} = {want} 바이트, "
                     f"받은 것 {got[0]}×{got[1]} {got[2]} = {len(body)} 바이트")
             k = self.hello_ok["camera"]
@@ -223,6 +242,11 @@ class WorldLink(Block):
                 raise WorldLinkError(
                     f"{self.name}: 3D 월드가 카메라 내부 값(fx, fy, cx, cy)을 보내지 않았습니다 — "
                     f"hello_ok.camera = {head.get('camera')!r}")
+            if (k.get("width"), k.get("height")) != (cam["width"], cam["height"]):
+                self._close_quietly()
+                raise WorldLinkError(
+                    f"{self.name}: 3D 월드 카메라 크기 {k.get('width')}×{k.get('height')} 가 "
+                    f"요청한 {cam['width']}×{cam['height']} 와 다릅니다")
         self.hello_ok = head
 
     def _close_quietly(self):
@@ -358,6 +382,7 @@ class Camera(SensorBlock):
                 f"{self.name}: 영상 한 장 {n} 바이트가 규약 최대 {MAX_BODY} 바이트를 넘습니다 "
                 f"({self.width}×{self.height} {fmt})")
         self._link = None
+        self._latest = None
 
     def hello_settings(self):
         """WorldLink 가 hello 에 넣는 카메라 설정."""
@@ -375,11 +400,21 @@ class Camera(SensorBlock):
 
     @property
     def latest(self):
-        """마지막 영상(Image) 또는 None."""
-        return self._link.latest_image if self._link is not None else None
+        """마지막 영상(Image) 또는 None — 이 카메라의 마지막 샘플 시점에 붙잡은 것.
+
+        출력 frame_seq 와 같은 영상이고 한 샘플 늦다. 다른 블록이 update() 에서
+        읽어도 블록 순서와 상관없이 같은 영상이다 (WorldLink 가 그 샘플에 새로
+        받은 영상은 다음 샘플에 보인다)."""
+        return self._latest
+
+    def dinitial(self):
+        self._latest = None
+        return super().dinitial()
 
     def output(self, t, u, xd):
-        img = self.latest
+        # 샘플 블록이라 자기 샘플 시점에만 불린다 — 모든 update() 보다 먼저
+        self._latest = self._link.latest_image if self._link is not None else None
+        img = self._latest
         if img is None:
             return (-1.0, 0.0)
         return (float(img.seq), max(0.0, t - img.t))

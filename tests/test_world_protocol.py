@@ -120,3 +120,8 @@ def test_fake_world_handshake():
             s.sendall(encode(BYE))
         assert w.wait_for("bye")
     assert [m["type"] for m in w.received] == ["hello", "reset", "step", "bye"]
+
+
+def test_encode_rejects_nan():
+    with pytest.raises(ProtocolError, match="유한"):
+        encode({"type": "step", "t": float("nan")})

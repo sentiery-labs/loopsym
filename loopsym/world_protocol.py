@@ -39,7 +39,11 @@ class ProtocolError(Exception):
 
 def encode(header, body=b""):
     """머리(dict) + 몸(bytes) → 보낼 바이트 한 덩어리."""
-    head = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    try:
+        head = json.dumps(header, ensure_ascii=False, separators=(",", ":"),
+                          allow_nan=False).encode("utf-8")
+    except ValueError as e:     # NaN/Infinity 는 JSON 이 아니다
+        raise ProtocolError(f"머리에는 유한한 숫자만 실을 수 있습니다: {e}") from None
     if len(head) > MAX_HEADER:
         raise ProtocolError(f"머리가 너무 큽니다: {len(head)} 바이트 (최대 {MAX_HEADER})")
     body = bytes(body)

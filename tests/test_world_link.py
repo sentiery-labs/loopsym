@@ -289,3 +289,18 @@ def test_example_ex12_summary_reports_collision(capsys):
     out = capsys.readouterr().out
     assert rc == 1
     assert "광개토관" in out and "충돌 있음" in out
+
+
+def test_diverged_state_raises_before_sending():
+    """발산한 상태(NaN)는 JSON 에 실을 수 없다 — 보내기 전에 시각·seq 와 함께 멈춘다."""
+    with FakeWorld() as w:
+        bd = Diagram()
+        link = bd.add(WorldLink(port=w.port, st=0.04))
+        for i, v in enumerate(STATE):
+            bd.connect(bd.add(Constant(float("nan") if i == 9 else float(v))), link[i])
+        for i in range(4):
+            bd.connect(bd.add(Constant(0.5)), link[13 + i])
+        with pytest.raises(WorldLinkError, match="발산") as ei:
+            run(bd, T_END, DT)
+        assert w.wait_for("bye")
+    assert "seq=0" in str(ei.value) and w.steps == []
