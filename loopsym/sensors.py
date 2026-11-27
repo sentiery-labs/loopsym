@@ -100,3 +100,72 @@ class IMU(SensorBlock):
         return (tuple(u[7:10])
                 + tuple(self._gauss(sg) for _ in range(3))
                 + tuple(self._gauss(sa) for _ in range(3)))
+
+
+class Rangefinder(SensorBlock):
+    """아래 방향 거리계(라이다·초음파 고도계): 기체 아래축(FRD +z) 광선의 거리.
+
+    입력: QuadPlant 출력 13개 (q 0..3 | pqr 4..6 | pN pE pD 7..9 | vel 10..12)
+    출력: range_m [0], valid(0/1) [1].  무효면 (max_range, 0).
+    포트는 fidelity 와 무관하게 불변 (ARCHITECTURE §2).
+
+      ideal : 평평한 지면(pD = 0) 가정. 거리 = 고도 / cos(기울기).
+              광선이 수평보다 위를 향하거나 max_range 를 넘으면 무효. 지면 위면 (0, 1).
+      noisy : ideal + 샘플마다 N(0, noise_sd) (유효할 때만, 0 아래는 0). seed 로 재현.
+      world : link 로 찾은 WorldLink 의 마지막 frame 값(range_m, range_valid).
+              3D 월드의 건물·지형까지 잰다. 한 샘플 늦고, 첫 샘플은 무효.
+    link: WorldLink 이름. 비우면 다이어그램의 유일한 WorldLink (서브시스템 안 포함).
+    """
+
+    supported_fidelity = ("ideal", "noisy", "world")
+    n_in = 13
+    n_out = 2
+    dstate_size = 1             # 유지 잡음 (noisy)
+
+    def __init__(self, fidelity="ideal", max_range=100.0, noise_sd=0.02, seed=0,
+                 st=0.04, link="", name=None):
+        super().__init__(fidelity, seed, st, name)
+        self.max_range = float(max_range)
+        self.noise_sd = float(noise_sd)
+        self.link = link
+        self._link = None
+
+    def resolve_links(self, blocks):
+        if self.fidelity != "world":
+            return
+        from .world import find_link        # world.py 가 이 모듈을 임포트하므로 지연 임포트
+        link = find_link(blocks, self.link)
+        if link.rangefinder is not None and link.rangefinder is not self:
+            raise ValueError(
+                f"{self.name}: {link.name} 에 거리계가 이미 있습니다({link.rangefinder.name}) — "
+                "WorldLink 하나에 world 거리계는 하나")
+        link.rangefinder = self
+        self._link = link
+
+    def _invalid(self):
+        return (self.max_range, 0.0)
+
+    def output(self, t, u, xd):
+        if self.fidelity == "world":
+            f = self._link.latest if self._link is not None else None
+            if f is None or not f.get("range_valid") or f.get("range_m") is None:
+                return self._invalid()
+            r = float(f["range_m"])
+            return (r, 1.0) if 0.0 <= r <= self.max_range else self._invalid()
+
+        qw, qx, qy, qz = u[0:4]
+        down = 1.0 - 2.0 * (qx * qx + qy * qy)      # R(q)·[0,0,1] 의 D 성분 = cos(기울기)
+        if down <= 1e-6:
+            return self._invalid()                   # 광선이 수평이거나 위를 향함
+        h = -u[9]
+        if h <= 0.0:
+            return (0.0, 1.0)
+        r = h / down
+        if r > self.max_range:
+            return self._invalid()
+        if self.fidelity == "noisy":
+            r = max(0.0, r + xd[0])
+        return (r, 1.0)
+
+    def update(self, t, u, xd):
+        return (self._gauss(self.noise_sd),) if self.fidelity == "noisy" else (0.0,)
