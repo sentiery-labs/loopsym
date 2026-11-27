@@ -97,3 +97,26 @@ def test_hello_message_fields():
     m = hello(4, 0.04, None, {"max_m": 100.0})
     assert m == {"type": "hello", "proto": 1, "vehicle": "quad", "rotors": 4, "link_st": 0.04,
                  "camera": None, "rangefinder": {"max_m": 100.0}}
+
+
+# ---------------------------------------------------------------- 시험용 가짜 월드 서버
+def test_fake_world_handshake():
+    import socket
+    from loopsym.world_protocol import socket_reader
+    from tests.fake_world import FakeWorld
+    with FakeWorld() as w:
+        with socket.create_connection(("127.0.0.1", w.port), timeout=2.0) as s:
+            s.sendall(encode(hello(4, 0.04, {"width": 64, "height": 48, "hfov_deg": 90.0,
+                                              "format": "gray8", "every": 1, "mount": "body"}, None)))
+            head, body = read_message(socket_reader(s))
+            assert head["type"] == "hello_ok" and head["proto"] == 1 and body == b""
+            assert head["camera"]["fx"] == pytest.approx(32.0)
+            s.sendall(encode(RESET))
+            assert read_message(socket_reader(s))[0]["type"] == "reset_ok"
+            s.sendall(encode(step(0, 0.0, (1, 0, 0, 0), (0, 0, -10), (0, 0, -10),
+                                  (0, 0, 0), (0, 0, 0), (0, 0, 0, 0))))
+            frame, _ = read_message(socket_reader(s))
+            assert frame["seq"] == 0 and frame["range_m"] == pytest.approx(10.0)
+            s.sendall(encode(BYE))
+        assert w.wait_for("bye")
+    assert [m["type"] for m in w.received] == ["hello", "reset", "step", "bye"]
