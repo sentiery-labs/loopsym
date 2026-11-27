@@ -19,13 +19,18 @@ ARCHITECTURE §2 의 fidelity Level 2 "world" 경로. loopsym 이 시간의 주�
   임포트는 되고, 실행하면 안내 오류로 멈춘다.
 """
 
+import os
 import sys
 
 from .core import Block
+from .sensors import SensorBlock
 from .world_protocol import (
-    BYE, DEFAULT_PORT, PROTO_VERSION, RESET, ProtocolError, encode, hello, read_message,
-    socket_reader, step,
+    BYE, DEFAULT_PORT, MAX_BODY, PROTO_VERSION, RESET, ProtocolError, encode, hello,
+    read_message, socket_reader, step,
 )
+
+_CHANNELS = {"gray8": 1, "rgb8": 3}
+_MOUNTS = ("body", "level")
 
 
 class WorldLinkError(RuntimeError):
@@ -101,6 +106,7 @@ class WorldLink(Block):
         self.hello_ok = None
         self.latest = None          # 마지막 frame 머리
         self.latest_body = b""      # 마지막 frame 몸(영상 바이트)
+        self.latest_image = None    # 마지막 영상(Image) — 찍지 않은 샘플에도 유지
         self._sock = None
         self._recv = None
         self._seq = 0
@@ -113,6 +119,7 @@ class WorldLink(Block):
         self._p_prev = None
         self.latest = None
         self.latest_body = b""
+        self.latest_image = None
         self._new_run = True        # 다음 update() 에서 reset 부터
         return (0.0,)
 
@@ -159,9 +166,27 @@ class WorldLink(Block):
         return xd
 
     def _accept_frame(self, head, body, t):
-        """받은 frame 을 마지막 값으로 저장한다."""
+        """받은 frame 을 마지막 값으로 저장한다. 영상이 있으면 크기를 확인하고 Image 로."""
+        info = head.get("camera")
+        img = None
+        if info and self.camera is not None:
+            cam = self.camera
+            want = cam.width * cam.height * _CHANNELS[cam.fmt]
+            got = (info.get("width"), info.get("height"), info.get("format"))
+            if got != (cam.width, cam.height, cam.fmt) or len(body) != want:
+                raise WorldLinkError(
+                    f"{self.name}: t={t:.3f}s seq={self._seq} 영상 크기가 설정과 다릅니다 — "
+                    f"설정 {cam.width}×{cam.height} {cam.fmt} = {want} 바이트, "
+                    f"받은 것 {got[0]}×{got[1]} {got[2]} = {len(body)} 바이트")
+            k = self.hello_ok["camera"]
+            img = Image(cam.width, cam.height, cam.fmt, body, float(head.get("t", t)),
+                        int(info.get("seq", self._seq)),
+                        float(k["fx"]), float(k["fy"]), float(k["cx"]), float(k["cy"]))
         self.latest = head
         self.latest_body = body
+        if img is not None:
+            self.latest_image = img
+            self.camera._image_arrived(img)
 
     # ---------------- 소켓 ----------------
     def _connect(self, t):
@@ -191,6 +216,13 @@ class WorldLink(Block):
                 pass
             self._close_quietly()
             raise WorldLinkError(f"{self.name}: {msg}")
+        if cam is not None:
+            k = head.get("camera") or {}
+            if not all(isinstance(k.get(n), (int, float)) for n in ("fx", "fy", "cx", "cy")):
+                self._close_quietly()
+                raise WorldLinkError(
+                    f"{self.name}: 3D 월드가 카메라 내부 값(fx, fy, cx, cy)을 보내지 않았습니다 — "
+                    f"hello_ok.camera = {head.get('camera')!r}")
         self.hello_ok = head
 
     def _close_quietly(self):
@@ -227,3 +259,138 @@ class WorldLink(Block):
         if head["type"] != kind:
             raise WorldLinkError(f"{where} '{kind}' 를 기다렸는데 '{head['type']}' 가 왔습니다")
         return head, body
+
+
+# ----------------------------------------------------------------------
+# 영상
+# ----------------------------------------------------------------------
+class Image:
+    """3D 월드 카메라 영상 한 장. 0번 행이 맨 위, 행 안에서는 왼쪽부터.
+
+    fmt: "gray8"(1 바이트/픽셀) | "rgb8"(3 바이트/픽셀, R G B).
+    fx, fy, cx, cy: 바늘구멍 카메라 내부 값 [픽셀] (월드의 hello_ok 에서).
+    t, seq: 찍힌 시각과 WorldLink 샘플 번호."""
+
+    def __init__(self, width, height, fmt, data, t, seq, fx, fy, cx, cy):
+        if fmt not in _CHANNELS:
+            raise ValueError(f"Image: fmt 는 {tuple(_CHANNELS)} 중 하나: {fmt!r}")
+        self.width, self.height, self.fmt = int(width), int(height), fmt
+        self.data = bytes(data)
+        self.t, self.seq = t, seq
+        self.fx, self.fy, self.cx, self.cy = fx, fy, cx, cy
+
+    @property
+    def channels(self):
+        return _CHANNELS[self.fmt]
+
+    def to_numpy(self):
+        """(height, width) 또는 (height, width, 3) uint8 배열. numpy 필요."""
+        try:
+            import numpy as np
+        except ImportError as e:
+            raise ImportError(
+                'Image.to_numpy() 는 numpy 가 필요합니다: pip install "loopsym[world]"') from e
+        a = np.frombuffer(self.data, dtype=np.uint8)
+        if self.channels == 1:
+            return a.reshape(self.height, self.width)
+        return a.reshape(self.height, self.width, 3)
+
+    def save_pnm(self, path):
+        """gray8 → 바이너리 PGM(P5), rgb8 → PPM(P6). 표준 라이브러리만."""
+        magic = b"P5" if self.channels == 1 else b"P6"
+        with open(path, "wb") as f:
+            f.write(magic + f"\n{self.width} {self.height}\n255\n".encode("ascii"))
+            f.write(self.data)
+
+    def __repr__(self):
+        return f"<Image {self.width}×{self.height} {self.fmt} seq={self.seq} t={self.t:.3f}>"
+
+
+class Camera(SensorBlock):
+    """아래 방향 카메라 (Sensors). 3D 월드가 찍은 영상을 WorldLink 로 받는다.
+
+    입력(13): QuadPlant 출력 (포트 규약 통일용 — 쓰지 않음)
+    출력(2): frame_seq (마지막 영상의 샘플 번호, 없으면 −1) | age_s (그 영상이 찍힌 뒤 지난 시간)
+    파이썬 속성 latest: 마지막 영상(Image) 또는 None — 상태추정 블록이 이것을 읽는다.
+    영상은 배선에 싣지 않는다(신호는 스칼라 하나). 한 샘플 늦다.
+
+    fidelity 는 "world" 만 (3D 월드 없이는 영상이 없다).
+    파라미터:
+      width, height, hfov_deg  해상도와 가로 시야각
+      fmt                      "gray8" | "rgb8"
+      every                    N 샘플마다 찍음 (기본 1 = WorldLink 샘플마다)
+      mount                    "body"(기체와 함께 기욺) | "level"(롤·피치 빼고 요만 따라감)
+      save_dir, save_every     영상을 {save_dir}/frame_{seq:06d}.pgm(.ppm) 으로 남김
+                               (seq % save_every == 0 인 영상만, 0 이면 안 남김)
+      link                     WorldLink 이름 (비우면 유일한 WorldLink)
+    좌표: 기체 아래(FRD +z)를 보고, 영상 위쪽 = 기수.
+    """
+
+    supported_fidelity = ("world",)
+    n_in = 13
+    n_out = 2
+    dstate_size = 1
+
+    def __init__(self, fidelity="world", width=640, height=480, hfov_deg=90.0, fmt="gray8",
+                 every=1, mount="body", save_dir="", save_every=0, link="", st=0.04, name=None):
+        super().__init__(fidelity, 0, st, name)
+        if fmt not in _CHANNELS:
+            raise ValueError(f"{self.name}: fmt 는 {tuple(_CHANNELS)} 중 하나: {fmt!r}")
+        if mount not in _MOUNTS:
+            raise ValueError(f"{self.name}: mount 는 {_MOUNTS} 중 하나: {mount!r}")
+        if int(every) < 1:
+            raise ValueError(f"{self.name}: every 는 1 이상: {every}")
+        if int(width) < 1 or int(height) < 1:
+            raise ValueError(f"{self.name}: width, height 는 1 이상: {width}×{height}")
+        if not 0.0 < float(hfov_deg) < 180.0:
+            raise ValueError(f"{self.name}: hfov_deg 는 0~180 사이: {hfov_deg}")
+        self.width, self.height = int(width), int(height)
+        self.hfov_deg = float(hfov_deg)
+        self.fmt = fmt
+        self.every = int(every)
+        self.mount = mount
+        self.save_dir = save_dir
+        self.save_every = int(save_every)
+        self.link = link
+        n = self.width * self.height * _CHANNELS[fmt]
+        if n > MAX_BODY:
+            raise ValueError(
+                f"{self.name}: 영상 한 장 {n} 바이트가 규약 최대 {MAX_BODY} 바이트를 넘습니다 "
+                f"({self.width}×{self.height} {fmt})")
+        self._link = None
+
+    def hello_settings(self):
+        """WorldLink 가 hello 에 넣는 카메라 설정."""
+        return {"width": self.width, "height": self.height, "hfov_deg": self.hfov_deg,
+                "format": self.fmt, "every": self.every, "mount": self.mount}
+
+    def resolve_links(self, blocks):
+        link = find_link(blocks, self.link)
+        if link.camera is not None and link.camera is not self:
+            raise ValueError(
+                f"{self.name}: {link.name} 에 카메라가 이미 있습니다({link.camera.name}) — "
+                "WorldLink 하나에 카메라는 하나")
+        link.camera = self
+        self._link = link
+
+    @property
+    def latest(self):
+        """마지막 영상(Image) 또는 None."""
+        return self._link.latest_image if self._link is not None else None
+
+    def output(self, t, u, xd):
+        img = self.latest
+        if img is None:
+            return (-1.0, 0.0)
+        return (float(img.seq), max(0.0, t - img.t))
+
+    def update(self, t, u, xd):
+        return xd
+
+    def _image_arrived(self, img):
+        """WorldLink 가 새 영상을 받을 때 부른다 — 파일 저장(블록 순서와 무관)."""
+        if not self.save_dir or self.save_every <= 0 or img.seq % self.save_every:
+            return
+        os.makedirs(self.save_dir, exist_ok=True)
+        ext = "pgm" if img.channels == 1 else "ppm"
+        img.save_pnm(os.path.join(self.save_dir, f"frame_{img.seq:06d}.{ext}"))
