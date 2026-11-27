@@ -55,18 +55,26 @@ Level 0 "ideal"    — plant 상태를 그대로 통과 (진리값, 지연/노�
 Level 1 "noisy"    — 수식 노이즈 모델 적용:
                      bias + white noise (noise density) + 샘플레이트 제한
                      (+ 센서별 특화: GPS는 지연+점프, Baro는 드리프트 등)
-Level 2 "gazebo"   — 해당 센서의 gz topic 구독으로 출력 교체
+Level 2 "world"    — 3D 월드 시뮬레이터(SENTIERY)와 lockstep 연동:
+                     WorldLink 블록이 기체 자세를 보내고 받은 센서 값으로 출력 교체
+                     (거리계·카메라 등 월드의 지형지물이 필요한 센서)
 Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
                      GPS: GPS_RAW_INT 등)으로 출력 교체
 ```
 
+> 2026-11-27 개정(충박사 결정, 설계 문서 "loopsym ↔ SENTIERY 드론 시뮬레이터 연동"):
+> Level 2 이름 "gazebo" → "world". Gazebo 는 같은 Level 2 자리에 붙일 수 있는
+> 다른 구현(미구현)이다. 통신 규약 = `docs/world_link_protocol.md`.
+
 ### 구현 규약
 
-- 모든 센서 블록은 `fidelity` 마스크 파라미터를 가진다 (enum: ideal/noisy/gazebo/hardware)
+- 모든 센서 블록은 `fidelity` 마스크 파라미터를 가진다 (enum: ideal/noisy/world/hardware)
+- 센서마다 지원하는 단계는 클래스 속성 `supported_fidelity` 에 적는다 (기본 ideal/noisy).
+  지원하지 않는 단계를 고르면 `NotImplementedError`
 - fidelity 변경 시 입출력 포트 수/이름/차원이 바뀌면 안 된다
 - Level 1의 노이즈 파라미터는 마스크로 노출: bias, noise_density, sample_rate_hz
   (기본값은 실제 센서 datasheet 근사치 — 예: ICM-42688 급)
-- Level 2/3은 내부적으로 Interfaces 계층(gz bridge, MAVLink)을 사용하되,
+- Level 2/3은 내부적으로 Interfaces 계층(WorldLink, MAVLink)을 사용하되,
   다이어그램상으로는 여전히 "IMU 블록"으로 보인다
 - noisy 노이즈는 시드 고정 가능해야 한다 (자동채점/회귀 테스트용)
 
@@ -121,7 +129,7 @@ Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
 - T4. Estimation 팔레트 (Complementary Filter 우선)
 - T5. Control/Allocation 팔레트 — PX4 v1.16 MATLAB 코드 이식
   (기존 px4_simulink 프로젝트의 mc_rate_control.m 등이 원본)
-- T6. Gazebo fidelity (Level 2) — P44b와 통합
+- T6. World fidelity (Level 2) — SENTIERY 3D 월드 연동(WorldLink). Gazebo(P44b)는 같은 자리의 다른 구현
 - T7. Hardware fidelity (Level 3) — P41 MAVLink 블록과 통합
 
 ---
@@ -148,7 +156,7 @@ Level 3 "hardware" — 실기체에서 MAVLink 수신 (IMU: HIGHRES_IMU,
 | §4 T3 나머지 센서 | [CLD-P63] | ⬜ P62 검증 후 |
 | §4 T4 Estimation 팔레트 | [CLD-P64] | ⬜ |
 | §4 T5 Control/Allocation 이식 | [CLD-P65] | ⬜ 원본 = px4_controller/ (소스 대조 검증 완료본) |
-| §4 T6 Gazebo fidelity | P44b 와 통합 | ⬜ 보류 (사용자 지시 7/14: P44b 착수 금지) |
+| §4 T6 World fidelity | WorldLink (2026-11-27) | 🟡 Rangefinder·Camera 부터 (Gazebo=P44b 는 보류 유지) |
 | §4 T7 Hardware fidelity | P41/P43 과 통합 | 🟡 P41 스파이크 준비완료 (실기체 대기) |
 | §5 P40/P42/P44a | — | ✅ 완료 (P40 재검증 PASS, 실시간 러너, ROS2 블록+turtlesim) |
 | §3 커리큘럼 대응 | [OPS-P21] | ✅ 해소(7/14) — **하이브리드 확정**, curriculum_15weeks.md 개정 완료. P22 착수 가능 |

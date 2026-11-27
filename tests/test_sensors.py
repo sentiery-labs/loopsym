@@ -49,7 +49,7 @@ def test_port_signature_invariant_across_fidelity():
         b = IMU(fidelity=f)
         assert (b.n_in, b.n_out) == (10, 6)
     with pytest.raises(NotImplementedError):
-        IMU(fidelity="gazebo")                  # 예약 (P44b)
+        IMU(fidelity="world")                   # IMU 는 Level 2 미지원
     with pytest.raises(NotImplementedError):
         IMU(fidelity="hardware")                # 예약 (P41/P43)
     with pytest.raises(ValueError):
@@ -102,3 +102,20 @@ def test_imu_json_roundtrip():
     bd, _ = _build_hover("noisy", seed=3)
     out = json.loads(run_simulation(json.dumps(export_json(bd)), 0.5, DT))
     assert out["errors"] == []
+
+
+def test_world_fidelity_not_supported_by_imu():
+    """Level 2 "world"(3D 월드 연동)는 IMU 가 아직 지원하지 않는다."""
+    with pytest.raises(NotImplementedError, match="world"):
+        IMU(fidelity="world")
+
+
+def test_gazebo_fidelity_name_removed():
+    """2026-11-27 개정: Level 2 이름 gazebo → world. 옛 이름은 잘못된 값."""
+    with pytest.raises(ValueError):
+        IMU(fidelity="gazebo")
+
+
+def test_fidelity_names():
+    from loopsym.sensors import _FIDELITY
+    assert _FIDELITY == ("ideal", "noisy", "world", "hardware")

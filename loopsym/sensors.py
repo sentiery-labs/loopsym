@@ -5,8 +5,11 @@
 
   fidelity = "ideal"    : plant 상태 그대로 통과 (진리값)
              "noisy"    : bias + 백색잡음(noise density) 수식 모델
-             "gazebo"   : 예약 (P44b — gz topic 구독으로 교체)
+             "world"    : 3D 월드 시뮬레이터(SENTIERY) 연동 — WorldLink 로 받은 값
              "hardware" : 예약 (P41/P43 — MAVLink 수신으로 교체)
+
+센서마다 지원하는 충실도는 클래스 속성 supported_fidelity 에 적는다
+(기본 ideal/noisy). 지원하지 않는 단계를 고르면 NotImplementedError.
 
 noisy 잡음은 seed 로 고정 가능 (자동채점/회귀 테스트용). 잡음은 샘플
 시점(update)마다 1회 생성해 이산상태로 유지 — RK4 minor step 이나 재실행
@@ -18,19 +21,22 @@ import random
 
 from .core import Block
 
-_FIDELITY = ("ideal", "noisy", "gazebo", "hardware")
+_FIDELITY = ("ideal", "noisy", "world", "hardware")
 
 
 class SensorBlock(Block):
     """센서 공통 베이스: fidelity 검증 + 시드 고정 RNG + 샘플타임."""
 
+    supported_fidelity = ("ideal", "noisy")   # 하위 클래스가 덮어쓴다
+
     def __init__(self, fidelity="ideal", seed=0, st=0.004, name=None):
         super().__init__(name)
         if fidelity not in _FIDELITY:
             raise ValueError(f"fidelity 는 {_FIDELITY} 중 하나: {fidelity!r}")
-        if fidelity in ("gazebo", "hardware"):
+        supported = type(self).supported_fidelity
+        if fidelity not in supported:
             raise NotImplementedError(
-                f"fidelity={fidelity!r} 는 예약됨 — gazebo=P44b, hardware=P41/P43")
+                f"{type(self).__name__}: fidelity={fidelity!r} 는 지원하지 않음 — 지원: {supported}")
         self.fidelity = fidelity
         self.seed = seed
         self.st = self.sample_time = st
