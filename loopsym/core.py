@@ -70,6 +70,15 @@ class Block:
         샘플 사이 구간에서 출력은 상수로 유지된다 (ZOH 는 내장 동작)."""
         return xd
 
+    # ---- 바깥 세계와 이어지는 블록용 (WorldLink, 센서의 world 충실도 등) ----
+    def resolve_links(self, blocks):
+        """Simulator 를 만들 때 한 번 불린다. blocks = 서브시스템을 펼친 뒤의
+        실제 블록 전부. 다른 블록을 이름으로 찾아 묶어 둘 때 쓴다."""
+
+    def finish(self):
+        """실행이 어떻게 끝나든(정상·예외·중간 정지) 그 실행마다 한 번 불린다.
+        접속을 닫는 등 뒷정리를 여기서 한다."""
+
     def __repr__(self):
         return f"<{type(self).__name__} '{self.name}'>"
 

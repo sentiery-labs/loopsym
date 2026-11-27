@@ -17,6 +17,8 @@ Simulink 의 ode4 (Runge-Kutta, fixed-step) 에 해당한다.
   블록(PID 등)이 minor step 의 입력으로 다시 계산되는 일이 없다.
 """
 
+import warnings
+
 from .core import Diagram, Port
 from .blocks import Scope, Subsystem, Inport, Outport
 
@@ -87,6 +89,9 @@ class Simulator:
         # 샘플 블록: sample_time 이 있는 블록 (이산 상태가 없어도 — 예: ZeroOrderHold)
         self.sampled = [b for b in diagram.blocks if b.sample_time is not None]
         self._held = {}     # 샘플 블록의 마지막 출력 — 샘플 사이에 그대로 낸다
+        # 블록끼리 이름으로 묶기 (예: 센서 → WorldLink). 펼친 블록 전부를 넘긴다
+        for b in diagram.blocks:
+            b.resolve_links(diagram.blocks)
 
     def _initial_state(self):
         x = [0.0] * self.n_states
@@ -175,6 +180,30 @@ class Simulator:
                     f"{b.name}: sample_time({b.sample_time})은 dt({dt})의 양의 정수배여야 함")
             period[b] = round(m)
         n = round(t_end / dt)
+        try:
+            yield from self._steps(x, n, dt, period)
+        except BaseException:
+            # 실행 중 난 예외(또는 GeneratorExit = 호출자가 중간에 멈춤)가 그대로
+            # 올라가야 한다 — finish 쪽 예외는 경고로만 알린다
+            for b, e in self._finish_all():
+                warnings.warn(f"{b.name}.finish() 오류: {e}", stacklevel=2)
+            raise
+        errors = self._finish_all()
+        if errors:
+            raise errors[0][1]
+
+    def _finish_all(self):
+        """모든 블록의 finish() 를 부르고 (블록, 예외) 목록을 돌려준다."""
+        errors = []
+        for b in self.bd.blocks:
+            try:
+                b.finish()
+            except Exception as e:      # noqa: BLE001 — 하나가 실패해도 나머지는 정리
+                errors.append((b, e))
+        return errors
+
+    def _steps(self, x, n, dt, period):
+        """iter_run 의 스텝 루프 본체."""
         for step in range(n + 1):
             t = step * dt          # 누적 덧셈 대신 곱셈 — 부동소수점 드리프트 방지
             # --- major step: 출력 계산, Scope 기록 ---
